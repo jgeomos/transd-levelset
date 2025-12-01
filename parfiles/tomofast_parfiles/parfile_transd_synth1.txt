@@ -1,0 +1,177 @@
+***********************************************************************************
+* This file contains all Tomofast-x input parameters with their default values,
+* and some descriptions. The parameters can be placed in any order in the Parfile.
+* Only relevant parameters need to be specified in the Parfile.
+* See 'parfiles' folder for some specific Parfile examples.
+*
+* For detailed description on every parameter section, see the User Manual located 
+* in the folder "docs/".
+***********************************************************************************
+
+===================================================================================
+GLOBAL
+===================================================================================
+global.outputFolderPath             = output/transd_synth1/
+global.description                  = Your parfile description.
+
+# A factor to multiply data by on input and divide by on output, e.g 1.0E-5 if input is in mGal or 1.0E-6 if input is in um/s2, default = 1.0 (m/s2).
+global.grav.dataUnitsMultiplier     = 1.0E-5
+
+===================================================================================
+MODEL GRID parameters
+===================================================================================
+# nx ny nz
+modelGrid.size                      = 66 30 30
+modelGrid.grav.file                 = data/gravmag/transd_synth1/model_grid_test.txt
+
+===================================================================================
+DATA parameters
+===================================================================================
+forward.data.grav.nData             = 205
+forward.data.grav.dataGridFile      = data/gravmag/transd_synth1/data_grid_test.txt
+forward.data.grav.dataValuesFile    = data/gravmag/transd_synth1/data_grid_test.txt
+forward.data.grav.nDataComponents   = 1
+
+# Switch between gravity (type = 1) and gravity gradiometry (type = 2).
+# Uses Gzz when nDataComponents = 1, or the full tensor when nDataComponents = 6 (the order is: xx, yy, zz, xy, yz, xz).
+forward.data.grav.type = 1
+
+# Data error.
+forward.data.grav.useError = 0
+forward.data.grav.errorFile = None
+
+===================================================================================
+DEPTH WEIGHTING
+===================================================================================
+# 1-depth weight, 2-distance weight.
+forward.depthWeighting.type                = 2
+forward.depthWeighting.grav.power          = 2.0d0
+forward.depthWeighting.grav.beta           = 1.d0
+forward.depthWeighting.grav.Z0             = 0.d0
+forward.depthWeighting.magn.power          = 3.0d0
+forward.depthWeighting.magn.beta           = 1.d0
+forward.depthWeighting.magn.Z0             = 0.d0
+
+# Local depth weight multipliers.
+forward.depthWeighting.applyLocalWeight    = 0
+forward.depthWeighting.grav.file           = None
+forward.depthWeighting.magn.file           = None
+
+===================================================================================
+SENSITIVITY KERNEL
+===================================================================================
+# 0-calculate the sensitivity, 1-read from files at the specified folder.
+sensit.readFromFiles                = 0
+sensit.folderPath                   = SENSIT_transd_synth1/
+
+===================================================================================
+MATRIX COMPRESSION
+===================================================================================
+# 0-none, 1-Haar, 2-Daubechies D4.
+forward.matrixCompression.type           = 1
+forward.matrixCompression.rate           = 0.1d0
+
+===================================================================================
+PRIOR MODEL
+===================================================================================
+# 1-set value, 2-read from file.
+inversion.priorModel.type                = 1
+# Number of models for model type 2.
+inversion.priorModel.nModels             = 1
+inversion.priorModel.grav.value          = 0.d0
+inversion.priorModel.grav.file           = None
+
+===================================================================================
+STARTING MODEL
+===================================================================================
+# 1-set value, 2-read from file.
+inversion.startingModel.type             = 1
+inversion.startingModel.grav.value       = 0.d0
+inversion.startingModel.grav.file        = None
+
+===================================================================================
+INVERSION parameters
+===================================================================================
+inversion.nMajorIterations               = 11
+inversion.nMinorIterations               = 100
+inversion.targetMisfit                   = 0.d0
+inversion.writeModelEveryNiter           = 0
+inversion.minResidual                    = 1.d-13
+
+===================================================================================
+MODEL DAMPING (m - m_prior)
+===================================================================================
+inversion.modelDamping.grav.weight       = 1.d-11
+inversion.modelDamping.magn.weight       = 1.d-8
+inversion.modelDamping.normPower         = 2.d0
+
+# Local damping weight.
+inversion.modelDamping.applyLocalWeight    = 0
+inversion.modelDamping.grav.file           = None
+inversion.modelDamping.magn.file           = None
+
+===================================================================================
+JOINT INVERSION parameters
+===================================================================================
+inversion.joint.grav.problemWeight           = 1.d0
+inversion.joint.magn.problemWeight           = 0.d0
+inversion.joint.grav.columnWeightMultiplier  = 4.d+3
+inversion.joint.magn.columnWeightMultiplier  = 1.d0
+
+===================================================================================
+DISJOINT INTERVAL BOUND constraints (ADMM)
+https://doi.org/10.1190/geo2019-0633.1
+===================================================================================
+inversion.admm.enableADMM              = 0
+# 1 - global from "bounds" parameter, 2 -local from file.
+inversion.admm.boundType               = 1
+inversion.admm.nLithologies            = 1
+inversion.admm.grav.bounds             = None
+inversion.admm.magn.bounds             = None
+inversion.admm.grav.boundsFile         = None
+inversion.admm.magn.boundsFile         = None
+inversion.admm.grav.weight             = 1.d-7
+inversion.admm.magn.weight             = 1.d+5
+
+# Parameters for dynamic weight adjustment (to enable set weightMultiplier > 1).
+inversion.admm.dataCostThreshold       = 1.e-4
+inversion.admm.weightMultiplier        = 1.0
+inversion.admm.maxWeight               = 1.e+10
+
+===================================================================================
+DAMPING-GRADIENT constraints
+https://doi.org/10.5194/se-10-193-2019
+===================================================================================
+# 1-global, 2-local.
+inversion.dampingGradient.weightType       = 1
+inversion.dampingGradient.grav.weight      = 0.d0
+inversion.dampingGradient.magn.weight      = 0.d0
+inversion.dampingGradient.grav.weightsFile = None
+inversion.dampingGradient.magn.weightsFile = None
+
+===================================================================================
+CROSS-GRADIENT constraints
+https://doi.org/10.1093/gji/ggaa414
+===================================================================================
+inversion.crossGradient.weight               = 0.d0
+# 1-forward, 2-central.
+inversion.crossGradient.derivativeType       = 1
+
+# To use the second model as a constant constraint.
+inversion.crossGradient.grav.keepModelConstant = 0
+inversion.crossGradient.magn.keepModelConstant = 0
+
+===================================================================================
+CLUSTERING constraints
+https://doi.org/10.1093/gji/ggz152
+===================================================================================
+inversion.clustering.grav.weight         = 0.d0
+inversion.clustering.magn.weight         = 0.d0
+inversion.clustering.nClusters           = 4
+inversion.clustering.mixtureFile         = None
+inversion.clustering.cellWeightsFile     = None
+# 1-normal, 2-log.
+inversion.clustering.optimizationType    = 2
+# 1-global, 2-local.
+inversion.clustering.constraintsType     = 2
+

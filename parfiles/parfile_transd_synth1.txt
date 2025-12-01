@@ -1,0 +1,108 @@
+# ============================== FILE PATHS ===================================
+[FilePaths]
+# Model of the area investigated. 
+model_filename = data_syn/model_grid_test_prior.txt
+
+# Perturbation that will be add to the model.
+perturbation_filename = None
+
+# File containing the mask (0 and 1s controlling where modifications are allowed).
+mask_filename = None
+
+# File containing local weights for prior geometrical model.
+local_weights_filename = None
+
+# File containing the gravity data. 
+data_vals_filename = data_syn/grav_calc_true.txt
+
+# File containing the density response of the background model. 
+data_background_filename = None
+
+# Path for the ouputs. 
+path_output = output_example_synth1
+
+# Path to the sensitivity matrix. 
+sensit_path = data_syn/SENSIT/
+
+# ============================== SOLVER PARAMETERS ============================
+[SolverParameters]
+# Type of sensitivity matrix and inversion: 'grav' (for gravity) or 'magn' (for magnetic).
+sensit_type = grav
+
+# Flag on unit conversion of the input gravity data (apply a 1e2 factor to do mGal).
+unit_conv = True
+
+# Flag on whether we use a mask to reduce the domain where modifications of the model are allowed.
+use_mask_domain = False
+
+# Maximum number of time steps (= modifications of the model).
+num_epochs = 100
+
+# Flag for use of mask from file. 
+use_loaded_mask = False
+
+#------------- PREPROCESSING PARAMETERS -- TODO remove from current transd?
+[PreProcessingParameters]
+# Index of rock unit (by increasing density value) to define the mask on perturbations.
+ind_unit_mask = 5
+# Distance max in number of cells away from the outline of rock unit considered.
+distance_max = 4  
+
+# ============================== SAVING OUTPUTS ===============================
+[SaveOutput]
+# Flag controlling whether plots will be saved. 
+save_plots = True
+# # How often to save models to disk (iterations). 1: save all models, 100: saves one model every 100.
+save_interval = 1
+
+# ============================== SAMPLING PARAMETERS ==========================
+[SamplingParams]
+# Index(es) of unit(s) that will be perturbed directly by sampling of random field. 
+indices_unit_pert = 0,1,2
+# Index of units whose modifications will be forced. 
+ind_unit_force = None
+# Index of unit whose geometry will guide the changes. # Pyr: 3 - Axial Zone. 7 - lower crust. 
+ind_unit_ref = None
+# Max number of births.
+n_births_max = 5
+# Type of perturbation that can be forced: 'petrophy_increase', petroph_decrease' or 'geometry'.
+force_pert_type = None 
+# Use dynamic masking. 
+use_dynamic_mask = False
+# Standard deviation for the likelihood. 
+std_data_fit = 0.1
+# Standard deviation on petrophysical values. 
+std_petro = 3.
+# Weight of prior model term in cost function. 
+std_geom_glob = 1.
+# Force accept of perth type 0: user-defined non-reversible perturbation.
+force_pert_0 = 0.
+# Force accept of perth type 1: random geometrical perturbation
+force_pert_1 = 0.
+# Force accept of perth type 2: random petrophysical perturbation
+force_pert_2 = 0.
+# Force accept of perth type 3: birth of a unit
+force_pert_3 = 0.5
+# Force accept of perth type 4: death of a unit
+force_pert_4 = 0.5
+
+# ============================== EXPERT PARAMETERS - PINK NOISE PARAMETERS ====
+[NoiseParams]
+# Factor mutliplyplying power of spectrum
+factor_spectrum_min = 2.5
+factor_spectrum_max = 2.51
+
+# Amplitude of noise (recommended: < sqrt(2.)). 
+amplitude_pert_min = 1
+amplitude_pert_max = 1.01
+
+# Local weights multiplying the values of noise. Can be used as mask.
+weights = None
+
+# Wether normalise before rescaling with amplitude_pert_min and amplitude_pert_max.
+normalise = True
+
+# Correlation lengths along axis 0 (z), axis 1 (x), axis 2 (y).
+correlation_length_0 = 1.
+correlation_length_1 = 1.
+correlation_length_2 = 1.

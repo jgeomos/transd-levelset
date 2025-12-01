@@ -1,0 +1,27 @@
+# ============================================================================
+# Requirements for Trans-Dimensional Geophysical Inversion
+# ============================================================================
+# Python version: >= 3.10 (uses match-case, type hints with |)
+# Last updated: 2025
+
+# Core numerical computing
+numpy>=1.24.0
+scipy>=1.10.0
+numba>=0.57.0
+
+# Signed distance / Level set methods
+scikit-fmm>=2023.4.2
+
+# Connected components analysis
+connected-components-3d>=3.12.0
+
+# Visualization and plotting
+matplotlib>=3.7.0
+colorcet>=3.0.1
+
+# Image/animation output
+Pillow>=10.0.0
+
+# VTK for 3D visualization (optional but recommended)
+# Note: vtk can be tricky to install....
+vtk>=9.2.0
