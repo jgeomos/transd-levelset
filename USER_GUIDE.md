@@ -126,14 +126,9 @@ Unlike traditional cell-based inversions, this framework uses **signed distance 
 ## Tips for New Users
 
 1. **Start with the example** — Run the provided synthetic example to understand the workflow before using your own data
-
-2. **Check your sensitivity matrix** — Ensure it matches your model grid dimensions
-
-3. **Start with few epochs** — Use `num_epochs = 20-50` initially to check that everything works before running longer chains
-
-4. **Tune acceptance rates** — If models rarely change, decrease `std_data_fit`; if they change too chaotically, increase it
-
-5. **View results in ParaView** — Open the `.vtk` files to visualize how the model evolves
+2. **Start with few epochs** — Use `num_epochs = 20-50` initially to check that everything works before running longer chains
+3. **Tune acceptance rates** — If models rarely change, decrease `std_data_fit`; if they change too chaotically, increase it
+4. **View results in ParaView** — Open the `.vtk` files to visualize how the model evolves, and analyse plots produced by the Python scripts to assess convervence or make a diagnonis on potential issues.
 
 
 ## Reproducibility
