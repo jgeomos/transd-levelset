@@ -64,9 +64,8 @@ or<br>
 `pip install colorcet`
 
 ## Quick Start
-### 0. Install 
 ### 1. Run example
-`python main.py ./parfiles/parfile_transd_synth1.txt 42 --plot`<br>
+`python main.py ./parfiles/parfile_transd_synth1.txt 42`<br>
 Runs the trans-dimensional inversion using the specified parameter file (`-p`) and random seed (`-s`) for reproducibility.
 or using the notebook `transd_main.ipynb`
 ### 2. For your data: Prepare your input files (see Input Section below). 
@@ -82,6 +81,8 @@ Input parameters are set in the parameter file (*.txt) and can be set manually b
 Advanced parameters are hard-coded in dedicated classes in Python files. 
 
 To run inversion, adjust the parameter file and run using 1., specifying your parfile name.
+
+For detailed parameter descriptions and usage tips, see [USER_GUIDE.md](USER_GUIDE.md).
 
 ### Inputs
 Data and model files follow Tomofast-X format:
@@ -117,7 +118,7 @@ src/ contains modules that are necessary to run inversion or to view results.
 ├── main.py                        # Script to run invesion (no plots). 
 ├── src/
 │   ├── transd_runner.py           # Orchestrate the execution
-│   ├── nullspace_solver.py        # MCMC sampling engine
+│   ├── transd_solver.py        # MCMC sampling engine
 │   ├── model_state.py             # Model state manager
 │   ├── petro_state.py             # Petrophysical state manager
 │   ├── birth_death.py             # Birth/death operations
@@ -149,6 +150,8 @@ src/ contains modules that are necessary to run inversion or to view results.
 ## Common Issues
 ### Install 
 VTK is the package that can cause issues when installing. 
+Input files not in the proper folder.
+
 ### Prior to running
 Make sure all files are in the proper folder!
 
