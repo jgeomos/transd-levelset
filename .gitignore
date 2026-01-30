@@ -193,3 +193,5 @@ log_file.txt
 output_example_synth/accepted_changes.json
 output_example_synth/accepted_changes_summary.txt
 /output_example_synth1
+/data_sw_wa
+/model_ausmoho_2
