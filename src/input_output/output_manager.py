@@ -7,7 +7,9 @@ import numpy as np
 import vtk
 import glob
 import os
-import json
+# import json
+import time
+from IPython.display import clear_output
 
 
 class ConditionalFormatter(logging.Formatter):
@@ -436,8 +438,8 @@ def save_model_to_vtk(voxel_data, grid_par_class, filename='voxet', save=True, l
     # OPTIMIZATION 1: Vectorized point creation
     # Flatten and stack coordinates for vectorized operations
     x_flat = x_grid.flatten()
-    y_flat = y_grid.flatten()[::-1]
-    z_flat = z_grid.flatten()[::-1]
+    y_flat = y_grid.flatten()
+    z_flat = z_grid.flatten()
     
     # Stack coordinates into a single array (N x 3)
     coords = np.column_stack((x_flat, y_flat, z_flat)).astype(np.float32)
