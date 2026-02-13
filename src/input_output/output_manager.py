@@ -105,7 +105,36 @@ class LogRun:
         error_msg = f"{context}: {type(e).__name__}: {str(e)}"
         self.error(error_msg)
         raise e
-    
+
+
+def clear_notebook_periodically(last_clear, interval_seconds, iteration=None, logger=None):
+    """
+    Clear Jupyter cell output if the time interval has passed.
+
+    Parameters
+    ----------
+    last_clear : float
+        Timestamp of the last clear (time.time()).
+    interval_seconds : float
+        How often to clear the output.
+    iteration : int, optional
+        Current loop iteration (for logging).
+    logger : logging.Logger, optional
+        Logger to record clearing events.
+
+    Returns
+    -------
+    float
+        Updated last_clear timestamp.
+    """
+    now = time.time()
+    if now - last_clear > interval_seconds:
+        clear_output(wait=True)
+        if logger is not None and iteration is not None:
+            logger.info(f"Output cleared at iteration {iteration}")
+        last_clear = now
+    return last_clear
+
 
 def save_random_field_perturbation_outputs(i, mvars, pert, mask_force_pert, gpars, spars, log_run):
     """
