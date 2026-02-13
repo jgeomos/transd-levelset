@@ -146,8 +146,8 @@ def load_sensit_from_tomofastx(sensit_path, nbproc, empty_sensit_class, type="gr
     csr_col = csr_col - 1
 
     # Convert units from Tomofast to geomos (as we use different gravitational constant).
-    if type == 'grav':
-        csr_dat = csr_dat * 1.e+3  # TODO: make it all SI.
+    # if type == 'grav':
+    #     csr_dat = csr_dat * 1.e+3  # TODO: make it all SI.
 
     # Create a sparse matrix object.
     matrix = csr_matrix((csr_dat, (csr_row, csr_col)), shape=(ndata_all, nmodel))
@@ -192,7 +192,7 @@ def read_tomofast_data(geophy_data, filename, data_type, path=None):
     geophy_data.z_data = data[:, 2]
 
 
-def read_tomofast_model(filename, mpars, path=None):
+def read_tomofast_model(filename, mpars, path=None, convert_coords_to_km=True):
     """
     Read model values and model grid stored in Tomofast-x format.
     Stores the coordinates of model cells in the class instance mpars.
@@ -239,9 +239,10 @@ def read_tomofast_model(filename, mpars, path=None):
         mpars.y = 0.5 * (mpars.y1 + mpars.y2)
         mpars.z = 0.5 * (mpars.z1 + mpars.z2)
 
+        if convert_coords_to_km:
         # Convert to km.
-        mpars.x = mpars.x / 1000.
-        mpars.y = mpars.y / 1000.
-        mpars.z = mpars.z / 1000.
+            mpars.x = mpars.x / 1000.
+            mpars.y = mpars.y / 1000.
+            mpars.z = mpars.z / 1000.
 
         return m_inv, mpars
