@@ -67,7 +67,7 @@ class GeophyData:
     -----
     - Warns if all values in data_field are identical.
     """
-    unit_conv: bool
+    unit_conv: bool = False
     bouguer_anomaly: bool = False
     data_calc: Optional[np.ndarray] = None
     data_field: Optional[np.ndarray] = None
