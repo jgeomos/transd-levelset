@@ -632,7 +632,7 @@ def save_metrics_summary(metrics, filepath, type_labels=None):
             count = metrics.count_by_type(pert_type)
             if count > 0:
                 percentage = count / n_accepted * 100 if n_accepted > 0 else 0
-                f.write(f"  {type_labels[pert_type]}: {count} ({percentage:.1f}%)\n")
+                f.write(f"  {type_labels[pert_type]}: {count} ({percentage:.1f}%) of total accepted \n")
 
 
 def save_metrics_data(metrics, filepath):
