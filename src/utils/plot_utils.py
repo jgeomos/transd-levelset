@@ -235,7 +235,7 @@ def plot_metrics(metrics, run_params, data_misfit_lims=np.array([0.25, 5.0]), pr
         for pert_type in range(5):
             count = metrics.count_by_type(pert_type)
             if count > 0:
-                print(f"  {type_labels[pert_type]}: {count} ({count/len(metrics.it_accepted_model)*100:.1f}%)")
+                print(f"  {type_labels[pert_type]}: {count} ({count/len(metrics.it_accepted_model)*100:.1f}%) of total accepted")
     
     plt.tight_layout()
 
@@ -252,6 +252,58 @@ def plot_metrics(metrics, run_params, data_misfit_lims=np.array([0.25, 5.0]), pr
 
     return None
     
+
+def plot_density_histograms(metrics, unit_indices=None, bins=30, burn_in=0, figsize=None):
+    """
+    Plot histograms of density values for original units.
+    
+    Parameters
+    ----------
+    metrics : InversionMetrics
+        Metrics object with petro_values_history array.
+    unit_indices : list of int, optional
+        Which units to plot. Default: all original units.
+    bins : int
+        Number of histogram bins.
+    burn_in : int
+        Number of initial iterations to discard.
+    figsize : tuple, optional
+        Figure size. Default scales with number of units.
+    
+    Returns
+    -------
+    fig : matplotlib Figure
+    """
+    history = metrics.petro_values_history[burn_in:, :]
+    n_units = history.shape[1]
+    
+    if unit_indices is None:
+        unit_indices = list(range(n_units))
+    
+    n_plots = len(unit_indices)
+    if figsize is None:
+        figsize = (4 * n_plots, 4)
+    
+    fig, axes = plt.subplots(1, n_plots, figsize=figsize, squeeze=False)
+    fig.suptitle('Histogram of petrophysical along the chain (all models)')
+    
+    for ax, idx in zip(axes[0], unit_indices):
+        values = history[:, idx]
+        values = values[values != 0]  # Remove unrecorded iterations
+        
+        if len(values) > 0:
+            ax.hist(values, bins=bins, edgecolor='black', alpha=0.7)
+            ax.axvline(np.mean(values), color='r', linestyle='--', label=f'Mean: {np.mean(values):.1f}')
+            ax.axvline(np.median(values), color='g', linestyle=':', label=f'Median: {np.median(values):.1f}')
+            ax.legend(fontsize=8)
+        
+        ax.set_xlabel('Density')
+        ax.set_ylabel('Count')
+        ax.set_title(f'Unit {idx}')
+        
+    plt.tight_layout()
+    return fig
+
 
 def create_inversion_animation(metrics, gpars, output_dir, 
                                filename='inversion_animation.gif',
@@ -340,7 +392,8 @@ def create_inversion_animation(metrics, gpars, output_dir,
         print(f"Using middle {axis}-slice: index {slice_index}")
     
     # Get accepted iterations and corresponding metrics
-    x_iterations = np.array(metrics.it_accepted_model)
+    # x_iterations = np.array(metrics.it_accepted_model)
+    x_iterations = range(len(metrics.data_misfit))
     y_misfit = metrics.data_misfit[x_iterations]
     accept_ratio = metrics.accept_ratio[x_iterations]
     
@@ -438,13 +491,22 @@ def create_section_gif_from_vts(vts_folder,
         slice_data1 = extract_slice_from_vts(vts_file, axis=axis, index=index)
         img_path = os.path.join(temp_dir, f"slice_{i:03d}.png")
         slice_data1 = slice_data1[::-1, :]
+        # Get model number from file name.
+        match = re.search(r'(\d+)(?=\.[^.]+$)', vts_file)
+        if match:
+            mod_num = int(match.group(1))
+        else: 
+            mod_num = None
         if i==0:
             slice_data0 = slice_data1.copy()
-        save_slice_as_image(slice_data0, slice_data1, 
-                            padding_start, padding_end, 
-                            x_misfit[:i], y_misfit[:i], y_lims, max_x_misfit, accept_ratio[:i], 
-                            gpars_class, img_path, index, clim=clim, ind=len(x_misfit[:i]), dpi=dpi)
-        image_files.append(img_path)
+        if mod_num is not None: 
+            save_slice_as_image(slice_data0, slice_data1, 
+                                padding_start, padding_end, 
+                                x_misfit, y_misfit, y_lims, max_x_misfit, accept_ratio, 
+                                gpars_class, img_path, 
+                                mod_num=mod_num, slice_index=index, 
+                                clim=clim, dpi=dpi)
+            image_files.append(img_path)
         print('Save as: ',  img_path)
 
     # Make the GIF
@@ -463,7 +525,7 @@ def create_model_flythrough_gif(model, gpars, output_path,
                                 decimate=1,
                                 fps=10,
                                 dpi=150,
-                                figsize=(10, 8),
+                                figsize=(16, 8),
                                 cmap=cc.cm.CET_R4,
                                 vmin=None, vmax=None,
                                 title_prefix='Slice',
@@ -758,27 +820,36 @@ def extract_slice_from_vts(vts_file, axis='z', index=None):
     return slice_2d
 
 
-def save_slice_as_image(slice_2d0, slice_2d, padding_start, padding_end, x_misfit, y_misfit, y_lims, max_x_misfit, accept_ratio, gpars_, image_file_name, index, cmap=cc.cm.CET_R4, clim=np.array((2600, 3290)), ind=None, dpi=150):
+def save_slice_as_image(slice_2d0, slice_2d, 
+                        padding_start, padding_end, 
+                        x_misfit, y_misfit, 
+                        y_lims, 
+                        max_x_misfit, 
+                        accept_ratio, 
+                        gpars_, 
+                        image_file_name, 
+                        mod_num,
+                        slice_index, 
+                        cmap=cc.cm.CET_R4, 
+                        clim=np.array((2600, 3290)), 
+                        dpi=150):
 
     diff = slice_2d - slice_2d0
 
-    fig = plt.figure(figsize=(6, 10))
+    fig = plt.figure(figsize=(12, 8))
     gs = gridspec.GridSpec(6, 2)
 
     ax1 = fig.add_subplot(gs[0:2, 0:2])  
     # ax1.imshow(slice_2d, cmap=cmap, origin='lower')  # TODO make it pcolormesh
 
-    horiz_axis = np.squeeze(gpars_.x.reshape(gpars_.dim)[:,index,padding_start:padding_end])
-    vert_axis = -np.squeeze(gpars_.z.reshape(gpars_.dim)[::-1,index,padding_start:padding_end])
+    horiz_axis = np.squeeze(gpars_.x.reshape(gpars_.dim)[:,slice_index,padding_start:padding_end])
+    vert_axis = -np.squeeze(gpars_.z.reshape(gpars_.dim)[::-1,slice_index,padding_start:padding_end])
 
     plot_model(ax1, horiz_axis, vert_axis, 
                     slice_2d[:, padding_start:padding_end], 
                     '', cmap=cmap, clim=clim)
 
-    if ind is not None: 
-        # plt.text(3, 3, str(ind))
-        if len(x_misfit)>1:
-            ax1.set_title('Model num. ' + str(x_misfit[-1]))
+    ax1.set_title('Model num. ' + str(mod_num) + ' for slice ' + str(slice_index))
 
     ax1_0 = fig.add_subplot(gs[2:4, 0:2])  
 
@@ -789,23 +860,24 @@ def save_slice_as_image(slice_2d0, slice_2d, padding_start, padding_end, x_misfi
     # Second plot on the third row
     ax2 = fig.add_subplot(gs[4, 0:2])    # only row 2
 
-    ax2.plot(x_misfit, y_misfit)
+    ax2.plot(x_misfit[:mod_num], y_misfit[:mod_num])
     if len(x_misfit)>1:
-        ax2.plot(x_misfit[-1], y_misfit[-1], 'o')
+        ax2.plot(x_misfit[mod_num], y_misfit[mod_num], 'o')
 
     ax2.set_xlim([0, max_x_misfit])
     ax2.set_ylim([y_lims[0], y_lims[1]])
     ax2.set_xlabel('Model index')
     ax2.set_title('Evolution of the data misfit')
-    ax2.set_ylabel('Data misfit [mGal]')
+    ax2.set_ylabel('Data misfit [SI]')
     ax2.grid(True) 
 
     # Third plot on the fourth row
     ax3 = fig.add_subplot(gs[5, 0:5])    # only row 2
 
-    ax3.plot(x_misfit, accept_ratio)
+
+    ax3.plot(x_misfit[:mod_num], accept_ratio[:mod_num])
     if len(x_misfit)>1:
-        ax3.plot(x_misfit[-1], accept_ratio[-1], 'o')
+        ax2.plot(x_misfit[mod_num], accept_ratio[mod_num], 'o')
 
     ax3.set_xlim([0, max_x_misfit])
     ax3.set_ylim([0., 1.])
@@ -1010,9 +1082,9 @@ def prepare_plots(dim, mvars, m_diff, ppars, xlims, ylims):
     #                np.array([m1.min(), m1.max()]),
     #                np.array([-200, 200]))
     # For homogenous model example.
-    ppars.clims = (np.array([-300, 300]),
-                   np.array([-300, 300]),
-                   np.array([-300, 300]),
+    ppars.clims = (np.array([2600, 3400]),
+                   np.array([2600, 3400]),
+                   np.array([2600, 3400]),
                    np.array([-300, 300]))
 
     # Colormaps for each subplot.
@@ -1035,10 +1107,12 @@ def prepare_plots(dim, mvars, m_diff, ppars, xlims, ylims):
 
     # Ticks for each colorbar.
     # For homogenous model example.
-    ppars.cbar_ticks = ([-200, -100, 0, 100, 200],
-                        [-200, -100, 0, 100, 200],
-                        [-200, -100, 0, 100, 200],
-                        [-200, -100, 0, 100, 200])
+    # ppars.cbar_ticks = ([-200, -100, 0, 100, 200],
+    #                     [-200, -100, 0, 100, 200],
+    #                     [-200, -100, 0, 100, 200],
+    #                     [-200, -100, 0, 100, 200])
+    
+    ppars.cbar_ticks = None
 
 
     ppars.xlims = xlims
