@@ -66,6 +66,8 @@ __email__ = "jeremie.giraud@uwa.edu.au"
 import numpy as np
 from importlib import reload
 import warnings
+import time
+from IPython.display import clear_output
 
 import src.utils.transd_utils as tu
 import src.forward_solver.forward_calculation as fcu
@@ -570,7 +572,10 @@ def _apply_forced_perturbation(petrovals, mvars, metrics, shpars, spars, gpars, 
             mvars.m_curr = tu.get_density_model(petrovals.all_values, mvars.phi_curr)
 
             # Calculate updated signed distances to calculate prior model cost. 
-            mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+            # mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+            #                                             cell_size=[1, 1, 1], narrow=True, log_run=log_run)
+
+            mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
                                                         cell_size=[1, 1, 1], narrow=True, log_run=log_run)
 
         jj += 1
@@ -640,7 +645,7 @@ def _apply_geometrical_perturbation(petrovals, mvars, metrics, shpars, spars, ph
     save_plots = spars.save_plots
 
     # Parameter controlling interface thickness.
-    tau = 0.51 
+    tau = 1.01  # TODO move this to the parfile?
     
     while np.array_equal(mvars.m_prev, mvars.m_curr):
         # Generate perturbation. 
@@ -678,10 +683,20 @@ def _apply_geometrical_perturbation(petrovals, mvars, metrics, shpars, spars, ph
                                 filename=path_output + '/' + filename_model_save_rt + str(i), 
                                 save=save_plots, log_run=log_run)
             return False
+        
+    # om.save_model_to_vtk(pert_phi.flatten(), gpars, 
+    #                     filename=path_output + '/' + "pert_phi_" + str(fact_spect) +"_it_"+ str(i), 
+    #                     save=save_plots, log_run=log_run)
+
+    # om.save_model_to_vtk(interface.flatten(), gpars, 
+    #                     filename=path_output + '/' + "interface_" + str(fact_spect) +"_it_"+ str(i), 
+    #                     save=save_plots, log_run=log_run)
 
     # Calculate updated signed distances to calculate prior model cost.
-    mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
-                                                   cell_size=gpars.cell_sizes, narrow=True, log_run=log_run)
+    # mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+    #                                                cell_size=gpars.cell_sizes, narrow=True, log_run=log_run)
+    mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, 
+                                                   cell_size=gpars.cell_sizes, narrow=False)
     return True
 
 
@@ -824,7 +839,8 @@ def _calc_metrics_and_decide(petrovals, mvars, metrics, shpars, rng_main, geophy
     accept, force_accept = metrics.accept_proposal(rng_main, 
                                                    shpars.force_pert_dict, 
                                                    i, pert_type,
-                                                   override_force=kill_too_weak)
+                                                   override_force=kill_too_weak,
+                                                   logger=log_run)
     if force_accept and (log_run is not None):
         log_run.info(f"forced accept for pert_type={pert_type}")
 
@@ -840,15 +856,15 @@ def _calc_metrics_and_decide(petrovals, mvars, metrics, shpars, rng_main, geophy
 
     if log_run is not None:
         log_run.info(f"Model it. {i}, Pert type {pert_type}: {decision_text}. "
-                        f"accept_ratio={metrics.accept_ratio[i]:.4f}, "
-                        f"data_misfit={metrics.data_misfit[i]:.4f}, "
-                        f"model_misfit={metrics.model_misfit[i]:.4f}")
+                        f"accept_ratio={metrics.accept_ratio[i]:.4e}, "
+                        f"data_misfit={metrics.data_misfit[i]:.4e}, "
+                        f"model_misfit={metrics.model_misfit[i]:.4e}")
         log_run.info(f"Force accept: {force_accept}")
     
     return accept
 
 
-def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, 
+def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, geophy_data,
                         birth_occured, n_births, gpars, spars, i, log_run):
     """
     Handle all the logic when a proposal is accepted.
@@ -857,6 +873,7 @@ def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type,
         int: updated n_births count
     """
     metrics.last_misfit_accepted = metrics.data_misfit[i]
+    metrics.last_accepted_model_misfit = metrics.model_misfit[i]
     metrics.it_accepted_type.append(pert_type)
     metrics.it_accepted_model.append(i)
 
@@ -896,13 +913,6 @@ def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type,
             petrovals.resync_with_model(mvars.m_curr)
             mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, cell_size=gpars.cell_sizes, narrow=False)  # TODO restrict only to affected units.
 
-    # Save accepted model every shpars.save_interval.
-    if i % spars.save_interval == 0: 
-        om.save_model_to_vtk(mvars.m_curr, gpars, 
-                            filename=spars.path_output + '/' + spars.filename_model_save_rt + str(i), 
-                            save=spars.save_plots, log_run=log_run)
-    # TODO save also the fwd for each model? As attached to the model file?
-    
     return n_births
 
 
@@ -1084,7 +1094,16 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
 
     accept = True
 
+    last_clear = time.time()
+    clear_notebook_time = 100  # seconds. 
     for i in range(shpars.num_epochs):  # Would starting wth i==1 make more sense? 
+
+        # Clear notebook output periodically
+        last_clear = om.clear_notebook_periodically(last_clear,
+                                                    clear_notebook_time,
+                                                    iteration=i,
+                                                    logger=log_run)
+
         log_run.info(f"\n---- STARTING ITERATION {i} ----")
         birth_occured = False 
         death_occured = False
@@ -1154,13 +1173,25 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
                                                       sensit, log_run, i, pert_type, birth_occured, death_occured, kill_too_weak)
 
         if accept: 
-            n_births = _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, 
+            n_births = _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, geophy_data,
                                     birth_occured, n_births, gpars, spars, i, log_run)
         elif not accept: 
             _restore_previous_state(mvars, petrovals, metrics, pert_type, force_pert_type, index_tmp, 
                                     pert_index_force, i, geophy_data, sensit)
             
         metrics.n_units_total[i] = petrovals.n_units_total
+        metrics.petro_values_history[i, :] = petrovals.get_original_values()
+
+        # Save accepted model and correponding fwd data every shpars.save_interval.
+        if i % spars.save_interval == 0: 
+            om.save_model_to_vtk(mvars.m_curr, gpars, 
+                                filename=spars.path_output + '/' + spars.filename_model_save_rt + str(i), 
+                                save=spars.save_plots, log_run=log_run)
+            
+            om.save_data_to_vtk(geophy_data, datatype_to_save='data_calc',
+                                                filename=spars.path_output + '/data_calc_'+ str(i), save=True, log_run=log_run)
+            om.save_data_to_vtk(geophy_data, datatype_to_save='difference',
+                                filename=spars.path_output + '/data_residuals_'+ str(i), save=True, log_run=log_run)
         
         # if i % 10 == 0:
         #     metrics.track_contacts(mvars.m_curr, gpars.cell_sizes, i)
