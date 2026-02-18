@@ -78,11 +78,10 @@ class PetroStateManager:
     """
 
     # Define allowed attributes.
-    __slots__ = ['_tracked_state', 'std_petro', 'distro_type', 'pert']  
+    __slots__ = ['_tracked_state', 'std_petro', 'distro_type', 'pert', 'n_units_original']  
    
     def __init__(self, std_petro=5., distro_type='gaussian', pert=np.array([0, 0]), 
-                model_curr=None, model_with_pert=None, log_run=None, 
-                track_histograms=False, histogram_bins=50, histogram_range=None):
+                model_curr=None, model_with_pert=None, log_run=None):
         """
         Initialize PetroStateManager with petrophysical properties and optional model-based initialization.
         
@@ -108,6 +107,7 @@ class PetroStateManager:
         self.std_petro: float = std_petro
         self.distro_type: str = distro_type
         self.pert: np.ndarry = pert
+        self.n_units_original: int = len(np.unique(model_curr))
         
         # Validation checks for distro_type
         if self.distro_type not in ('uniform', 'gaussian'):
@@ -533,6 +533,15 @@ class PetroStateManager:
             sum_sq_diff_prev += (prev - orig) * (prev - orig)
             
         return sum_sq_diff_curr, sum_sq_diff_prev
+    
+    def get_original_values(self):
+        """Return array of current values for original units, indexed by orig_idx."""
+        n_orig = self.n_units_original
+        result = np.zeros(n_orig)
+        for val, item_id, origin, _, _, orig_idx in self._tracked_state["items"]:
+            if origin == 'orig':
+                result[orig_idx] = val
+        return result
     
     def calc_petro_pert(self, model_with_pert) -> np.ndarray:
         """Calculate perturbation from model without modifying state."""

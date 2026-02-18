@@ -70,12 +70,13 @@ class InversionMetrics:
                 'model_misfit', 'petro_misfit', 'accept_ratio', 
                 'log_likelihood_ratio', 'log_likelihood', 'log_priorgeom_ratio', 'log_priorgeom', 
                 'log_priorpetro_ratio', 'log_priorpetro', 'log_posterior',
-                'it_accepted_model', 'it_accepted_type', 'last_misfit_accepted', 'contact_areas',
-                'n_units_total']
+                'it_accepted_model', 'it_accepted_type', 'last_misfit_accepted', 
+                'last_accepted_model_misfit', 'contact_areas',
+                'n_units_total', 'petro_values_history']
 
-    def __init__(self, reference_misfit, starting_misfit, n_proposals=1, max_misfit_force=np.inf):
+    def __init__(self, reference_misfit, starting_misfit, n_units_original, n_proposals=1, max_misfit_force=np.inf):
         # Validation
-        if n_proposals <= 0:
+        if n_proposals < 0:
             raise qc.ParameterValidationError(f"`n_proposals` must be positive. Got: {n_proposals}")
         if reference_misfit < 0:
             raise qc.ParameterValidationError(f"`reference_misfit` cannot be negative. Got: {reference_misfit}")
@@ -87,7 +88,7 @@ class InversionMetrics:
         self.max_misfit_force: float = max_misfit_force
 
         self.data_misfit: np.ndarray = np.zeros(n_proposals, dtype=np.float32)
-        self.model_misfit: np.ndarray = np.zeros(n_proposals, dtype=np.float32)
+        self.model_misfit: np.ndarray = np.zeros(n_proposals, dtype=np.float64)
         self.petro_misfit: np.ndarray = np.zeros(n_proposals, dtype=np.float32)
 
         # Related to posterior and acceptance. 
@@ -107,7 +108,11 @@ class InversionMetrics:
 
         # Set initial values
         self.last_misfit_accepted: float = starting_misfit
+        self.last_accepted_model_misfit: float = 0.0
         self.data_misfit[0] = starting_misfit
+        # self.data_misfit[0] = starting_misfit
+
+        self.petro_values_history = np.zeros((n_proposals, n_units_original))
 
         # Track contact evolution
         self.contact_areas = [] 
@@ -292,10 +297,10 @@ class InversionMetrics:
 
         # Logging.
         if log_run is not None:
-            log_run.info(f'iteration {ind}: reference_misfit {reference_misfit:.6f}')
-            log_run.info(f'iteration {ind}: current_misfit {current_misfit:.6f}')
-            log_run.info(f'iteration {ind}: previous_misfit {previous_misfit:.6f}')
-            log_run.info(f'iteration {ind}: log_likelihood_ratio {self.log_likelihood_ratio[ind]:.6f}')
+            log_run.info(f'iteration {ind}: reference_misfit {reference_misfit:.4e}')
+            log_run.info(f'iteration {ind}: current_misfit {current_misfit:.4e}')
+            log_run.info(f'iteration {ind}: previous_misfit {previous_misfit:.4e}')
+            log_run.info(f'iteration {ind}: log_likelihood_ratio {self.log_likelihood_ratio[ind]:.4e}')
 
         return None
     
@@ -355,20 +360,13 @@ class InversionMetrics:
         # cost_curr = cost_curr_total / total_size
         # cost_prev = cost_prev_total / total_size
         
-        if ind > 0:
-            self.log_priorgeom_ratio[ind] = - self.model_misfit[ind] + self.model_misfit[ind-1]
-            # self.model_misfit[ind] = np.sqrt(cost_curr)
-            if log_run is not None:
-                log_run.info(f'iteration {ind}: Previous model cost: {self.model_misfit[ind-1]}')
-        else: 
-            self.log_priorgeom_ratio[ind] = -self.model_misfit[ind]
-            if log_run is not None:
-                log_run.info(f'iteration {ind}: Previous model cost: {0.}')
+        # Calculate log prior ratio using last accepted model misfit (not previous iteration's misfit)
+        self.log_priorgeom_ratio[ind] = - self.model_misfit[ind] + self.last_accepted_model_misfit
+        
         if log_run is not None:
+            log_run.info(f'iteration {ind}: Last accepted model cost: {self.last_accepted_model_misfit}')
             log_run.info(f'iteration {ind}: Current model cost {self.model_misfit[ind]}')
             log_run.info(f'iteration {ind}: log_priorgeom_ratio {self.log_priorgeom_ratio[ind]}')
-
-        # self.log_priorgeom_ratio[ind] = 0.
 
         return None
     
@@ -399,12 +397,12 @@ class InversionMetrics:
         
         self.log_priorpetro_ratio[ind] = log_petro_curr - log_petro_prev
         self.petro_misfit[ind] = -log_petro_curr
-        self.log_priorpetro_ratio[ind] = -log_petro_curr  # TODO refactor to separate misfits and log-prior and log-likelihood!
+        # self.log_priorpetro_ratio[ind] = -log_petro_curr  # TODO refactor to separate misfits and log-prior and log-likelihood!
 
         if log_run is not None: 
             log_run.info(f'iteration {ind}: log_petro_prev {log_petro_prev}')
             log_run.info(f'iteration {ind}: log_petro_curr {log_petro_curr}')
-            log_run.info(f'iteration {ind}: log_priorpetro_ratio {self.log_priorpetro_ratio[ind]}')
+            # log_run.info(f'iteration {ind}: log_priorpetro_ratio {self.log_priorpetro_ratio[ind]}')
         return None
     
     def calc_log_posterior(self, ind, log_run=None):
@@ -414,12 +412,15 @@ class InversionMetrics:
         """
         self.log_posterior[ind] =   self.log_likelihood[ind] + \
                                     self.log_priorgeom[ind] + \
-                                    self.log_priorpetro[ind]
+                                    self.log_priorpetro[ind] # This is equal to term_sum from calc_accept_ratio. TODO refactor. 
         if log_run is not None: 
+            log_run.info(f'iteration {ind}: log_likelihood {self.log_likelihood[ind]}')
+            log_run.info(f'iteration {ind}: log_priorgeom {self.log_priorgeom[ind]}')
+            log_run.info(f'iteration {ind}: log_priorpetro {self.log_priorpetro[ind]}')
             log_run.info(f'iteration {ind}: log_posterior {self.log_posterior[ind]}')
         return None
 
-    def accept_proposal(self, rng_, force_accept_ratio, ind, pert_type, override_force=False):
+    def accept_proposal(self, rng_, force_accept_ratio, ind, pert_type, override_force=False, logger=None):
         """
         Calculate acceptance ratio and then decide whether to accept or reject a proposal,
         with the possibility to force accept using a rate defined a priori by User. 
@@ -436,7 +437,7 @@ class InversionMetrics:
         """
 
         # Calculate acceptance ratio using MH criterion.
-        self.calc_accept_ratio(ind)
+        self.calc_accept_ratio(ind, logger)
 
         # Special case: external override (e.g., kill_too_weak)
         if override_force:
@@ -468,7 +469,7 @@ class InversionMetrics:
                 accept = False
             return accept, force_accept
 
-    def calc_accept_ratio(self, ind): 
+    def calc_accept_ratio(self, ind, logger): 
         """ 
         Proxy for Metropolis-Hastings acceptance ratio 
         using log likelihood and log petro prior and log geometrical prior. 
@@ -478,6 +479,12 @@ class InversionMetrics:
         term_sum = (self.log_likelihood_ratio[ind] + 
                     self.log_priorgeom_ratio[ind] + 
                     self.log_priorpetro_ratio[ind])
+                    
+        if logger is not None: 
+            logger.info(f'iteration {ind}: log_likelihood_ratio {self.log_likelihood_ratio[ind]}')
+            logger.info(f'iteration {ind}: log_priorgeom_ratio {self.log_priorgeom_ratio[ind]}')
+            logger.info(f'iteration {ind}: log_priorpetro_ratio {self.log_priorpetro_ratio[ind]}')
+            logger.info(f'iteration {ind}: term_sum {term_sum}')
 
         # Get the log of accept ratio. 
         # Metropolis-Hastings: min(1, exp(log_ratio)). Here, take the log of this. 
