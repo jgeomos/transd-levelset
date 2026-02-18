@@ -26,6 +26,7 @@ import numpy as np
 import os
 from importlib import reload
 
+
 # Home-made libs. 
 import src.forward_solver.forward_calculation as fcu
 from src.forward_solver.tomofast_sensit import TomofastxSensit
@@ -110,6 +111,7 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     folder_transd = os.path.join(cwd, folder_transd)
 
     bouguer_anomaly = True
+    convert_coords_to_km = False
 
     #----- Unpacking parameter class 'par'.
     # General parameters. 
@@ -172,12 +174,9 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     # Read models and model grid.
     local_weights_filename = par.local_weights_filename
     # mvars.m_start: starting point for the nullspace navigation (unperturbed model).
-    mvars.m_start, gpars = tu.read_tomofast_model(model_filename, gpars, path=folder_transd)
+    mvars.m_start, gpars = tu.read_tomofast_model(model_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
 
-    local_weights_prior, _ = tu.read_tomofast_model(local_weights_filename, gpars, path=folder_transd)  
-
-    # JG 03/09
-    # mvars.m_start[mvars.m_start == 2660.] = 2685.
+    local_weights_prior, _ = tu.read_tomofast_model(local_weights_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
 
     # ----------------------------------------------------------------------------------
     # Pre-processing parameters: definition of mask.
@@ -206,7 +205,7 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                             nbproc=tomofast_sensit_nbproc, 
                                             empty_sensit_class=TomofastxSensit,
                                             type=sensit_type, 
-                                            verbose=False, 
+                                            verbose=True, 
                                             path=folder_transd)
         sensit.precompute_all()  # Calculate inverse weights for fwd data calc and cache the transpose of sensit.
 
@@ -230,11 +229,11 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                             )  
 
     # Load model perturbation: the model change we want to impose (the final model should have this change).
-    mvars.delta_m_orig, _ = tu.read_tomofast_model(perturbation_filename, gpars, path=folder_transd)
+    mvars.delta_m_orig, _ = tu.read_tomofast_model(perturbation_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
 
     # Load the mask. 
     if par.use_loaded_mask: 
-        mvars.loaded_mask, _ = tu.read_tomofast_model(mask_filename, gpars, path=folder_transd)
+        mvars.loaded_mask, _ = tu.read_tomofast_model(mask_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
 
     # Initialise models for sampling.
     mvars.m_curr = mvars.m_start.copy()
@@ -245,15 +244,22 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     _, starting_misfit = fcu.calc_data_rms(geophy_data)
     if log_run is not None: 
         log_run.info(f'Data misfit (before perturbation) = {starting_misfit}')
+
+    # Save starting data as VTP
+    om.save_data_to_vtk(geophy_data, datatype_to_save='data_calc', 
+                                            filename=spars.path_output + '/data_starting', save=True, log_run=log_run)
+    om.save_data_to_vtk(geophy_data, datatype_to_save='difference', 
+                                            filename=spars.path_output + '/data_residuals', save=True, log_run=log_run)
     
     #-----------------------------------------------------------------------------------
     # Initialisation. 
     #-----------------------------------------------------------------------------------
     # Initialise metrics for monitoring. 
     metrics = im.InversionMetrics(reference_misfit=0.,  # TODO read this from the parfile (useful for nullspace)
-                                starting_misfit=starting_misfit,                                   
+                                starting_misfit=starting_misfit,  
+                                n_units_original=len(np.unique(mvars.m_start)),                                  
                                 n_proposals=shpars.num_epochs, 
-                                max_misfit_force=5.0)
+                                max_misfit_force=5.0,)
 
     # Initialise petrophysical variables class.
     petrovals = psm.PetroStateManager(std_petro=par.std_petro, 
