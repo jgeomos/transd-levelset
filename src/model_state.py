@@ -14,7 +14,7 @@ License: MIT
 __email__ = "jeremie.giraud@uwa.edu.au"
 
 import numpy as np
-import src.utils.transd_utils as nu
+import src.utils.transd_utils as tu
 
 
 class ModelStateManager:
@@ -79,7 +79,7 @@ class ModelStateManager:
     >>> 
     >>> # Propose perturbation
     >>> mvars.phi_curr[2] += perturbation  # Modify unit 2
-    >>> mvars.m_curr = nu.get_density_model(petrovals.all_values, mvars.phi_curr)
+    >>> mvars.m_curr = tu.get_density_model(petrovals.all_values, mvars.phi_curr)
     >>> 
     >>> # Accept or reject
     >>> if accepted:
@@ -212,15 +212,15 @@ class ModelStateManager:
         """
         
         # Get the signed distances of the perturbation. 
-        # mvars.phi_nullspace_orig = nu.calc_signed_distances(mvars.delta_m_orig, petrovals.pert, cell_size=cell_size)
+        # mvars.phi_nullspace_orig = tu.calc_signed_distances(mvars.delta_m_orig, petrovals.pert, cell_size=cell_size)
         if self.mod_aux is not None: 
-            self.phi_aux = nu.calc_signed_distances(self.mod_aux, 
+            self.phi_aux = tu.calc_signed_distances(self.mod_aux, 
                                                     petrovals.pert[petrovals.pert != 0.], 
                                                     cell_size=cell_size).astype(np.float32)
             self.phi_aux_prev = self.phi_aux.copy()
         
         # Get the signed distances of the model with initial perturbation. 
-        self.phi_curr = nu.calc_signed_distances(self.m_curr, petrovals.all_values, cell_size=cell_size).astype(np.float32)
+        self.phi_curr = tu.calc_signed_distances(self.m_curr, petrovals.all_values, cell_size=cell_size).astype(np.float32)
         self.phi_start = self.phi_curr.copy()
         self.phi_prior = self.phi_curr.copy()
 
@@ -323,7 +323,7 @@ class ModelStateManager:
         # Calculates the mask based on distance to outline of selected units.
         if use_mask_domain:
             # Calculate the signed distances using the density model: used to define mask controlling areas that can change.
-            phi = nu.calc_signed_distances(dens_model, np.unique(dens_model), cell_size=None, narrow=False)
+            phi = tu.calc_signed_distances(dens_model, np.unique(dens_model), cell_size=None, narrow=False)
 
             # Mask on cells farther than a certain distance to the units with index ind_unit_mask
             # In the paper example: masks values further than a certain distance away from the mantle.
