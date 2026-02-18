@@ -59,15 +59,16 @@ class RunBaseParams():
     # What index of perturbation is a birth. 
     pert_is_birth: int = 3
 
-    force_pert_type: str | None = None
-
     # The different types of perturbations. 
     # perts_all = (1, 5)
+    force_pert_type: str | None = None
+    perts_all: tuple[int, int] | None = None
 
     def __post_init__(self):
-        value = (0, 5) if self.force_pert_type is not None else (1, 5)
-        object.__setattr__(self, 'perts_all', value)
-    
+        if self.perts_all is None:
+            value = (0, 5) if self.force_pert_type is not None else (1, 5)
+            object.__setattr__(self, 'perts_all', value)
+
     # Message mappings.
     # TODO for flexibility: instaed of sampling from 0, 1, 2, ... and mapping to a type, use 
     # dictionnaries with "birth", "death", "petro", "geome" --> move flexibility, less bugs. 
@@ -77,7 +78,7 @@ class RunBaseParams():
         2: "pert_type = 2 -> Random petrophysical perturbation",
         3: "pert_type = 3 -> Birth of a unit",
         4: "pert_type = 4 -> Death of a unit",
-    })
+        })
 
 
 @dataclass(slots=True)
@@ -319,14 +320,14 @@ class SolverParameters:
             normalise = False 
             warnings.warn("No value for loaded_weights: set it to a scalar = 1. ", UserWarning)
 
+        self.local_weights_prior = loaded_weights
+
         if normalise:
             wmin, wmax = np.min(loaded_weights), np.max(loaded_weights)
             if np.isclose(wmax, wmin):
                 raise ValueError("Loaded weights have zero variance — cannot normalise.")
             self.local_weights_prior = (loaded_weights - wmin) / (wmax - wmin)
             self.local_weights_prior += 0.001  # numerical stability
-
-        self.local_weights_prior = loaded_weights
 
         # Sanity check
         if np.isnan(self.local_weights_prior).any():
