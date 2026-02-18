@@ -583,7 +583,7 @@ def calc_signed_distances(mod_dens_const, drho0, cell_size=[1, 1, 1], narrow=Fal
         # Use FMM with narrow or wide banding.
         # arg. 'periodic' controls boundary conditions.
         if narrow:
-            result = skfmm.distance(signdist[i], cell_size, order=2, periodic=False, narrow=2 * cell_size[0])
+            result = skfmm.distance(signdist[i], cell_size, order=2, periodic=False, narrow=3 * cell_size[0])
             print('Calculating BAND LIMITED signed-dist. (2*dim[0] band)')
         else:
             result = skfmm.distance(signdist[i], cell_size, order=2, periodic=False)
@@ -612,7 +612,7 @@ def unmask_signdist(phi_masked, phi_for_approx):
 
 def compute_signed_distance(signdist_i_, cell_size, narrow):
         if narrow:
-            result = skfmm.distance(signdist_i_, cell_size, order=1, periodic=False, narrow=2 * cell_size[0])
+            result = skfmm.distance(signdist_i_, cell_size, order=1, periodic=False, narrow=3 * cell_size[0])
         else:
             result = skfmm.distance(signdist_i_, cell_size, order=1, periodic=False)
         return result.astype(np.float32) 
