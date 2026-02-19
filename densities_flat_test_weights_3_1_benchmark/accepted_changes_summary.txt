@@ -1,0 +1,9 @@
+============================================================
+ACCEPTED CHANGES SUMMARY
+============================================================
+
+Total accepted: 4
+
+Random petrophysical perturbation: 4 times
+  Iterations: [1, 2, 8, 9]
+

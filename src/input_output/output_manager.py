@@ -11,6 +11,7 @@ import os
 import time
 from IPython.display import clear_output
 import shutil
+import time
 
 
 class ConditionalFormatter(logging.Formatter):
@@ -69,6 +70,8 @@ class LogRun:
         self.logger.handlers = []  # Clear existing handlers (important for notebooks)
         self.verbose = verbose
 
+        self.start_time = time.time()
+
         file_handler = logging.FileHandler(log_name, mode='w')
         file_handler.setLevel(logging.INFO)
         file_format = logging.Formatter('%(message)s')
@@ -85,6 +88,10 @@ class LogRun:
         if self.verbose:
             self.info('\n (Logging results: can take slightly longer and create big log files.)')
             self.info('\n--------- Started main script ---------')
+            timestamp = time.time()
+            timestamp = time.time()
+            local_time = time.localtime(timestamp)
+            self.info(f'Started on {time.strftime("%Y-%m-%d at %H:%M:%S", local_time)}')
 
     def info(self, message):
         if self.verbose:
@@ -97,7 +104,7 @@ class LogRun:
         self.logger.error(message)
 
     def close(self):
-        self.info('Completed.')
+        self.info('All done.')
         for handler in self.logger.handlers:
             handler.close()
             self.logger.removeHandler(handler)
@@ -106,6 +113,14 @@ class LogRun:
         error_msg = f"{context}: {type(e).__name__}: {str(e)}"
         self.error(error_msg)
         raise e
+    
+    def log_run_complete(self):
+        """Log completion time, date, and elapsed duration, then close the log."""
+        timestamp = time.time()
+        local_time = time.localtime(timestamp)
+        self.info(f'Completed on {time.strftime("%Y-%m-%d at %H:%M:%S", local_time)}')
+        self.info(f'RUN TIME: {timestamp - self.start_time:.2f} sec')
+        self.close()
 
 
 def copy_parfile(parfile_path, output_path):

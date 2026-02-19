@@ -1,0 +1,9 @@
+Inversion Metrics Summary
+Reference misfit: 0.0
+Last accepted misfit: 0.0003864709287881851
+
+Acceptance rate: 0.400
+Mean accept ratio: 0.400
+
+Accepted changes by type:
+  Type 2: 4 (100.0%) of total accepted 
