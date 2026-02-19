@@ -520,7 +520,7 @@ def read_input_parameters(parfile_path, log_run, par=None):
             raise ValueError("Failed to open/find a parameters file!")
 
         par = InputParameters()
-        log_run.info("PARFILE")
+        log_run.info("Reading PARFILE")
 
         def log_config_section(log_run, config, section):
             log_run.info(f"\n------ {section} ------")
