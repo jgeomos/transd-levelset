@@ -10,6 +10,7 @@ import os
 # import json
 import time
 from IPython.display import clear_output
+import shutil
 
 
 class ConditionalFormatter(logging.Formatter):
@@ -105,6 +106,11 @@ class LogRun:
         error_msg = f"{context}: {type(e).__name__}: {str(e)}"
         self.error(error_msg)
         raise e
+
+
+def copy_parfile(parfile_path, output_path):
+    """Copy parameter file to output folder for reproducibility."""
+    shutil.copy(parfile_path, output_path)
 
 
 def clear_notebook_periodically(last_clear, interval_seconds, iteration=None, logger=None):
