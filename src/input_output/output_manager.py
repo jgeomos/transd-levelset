@@ -114,13 +114,27 @@ class LogRun:
         self.error(error_msg)
         raise e
     
-    def log_run_complete(self):
+    def log_run_complete(self, output_path=None):
         """Log completion time, date, and elapsed duration, then close the log."""
         timestamp = time.time()
         local_time = time.localtime(timestamp)
         self.info(f'Completed on {time.strftime("%Y-%m-%d at %H:%M:%S", local_time)}')
         self.info(f'RUN TIME: {timestamp - self.start_time:.2f} sec')
+
+        # Get log file path before closing
+        if output_path is not None: 
+            log_file = None
+            for handler in self.logger.handlers:
+                if isinstance(handler, logging.FileHandler):
+                    log_file = handler.baseFilename
+                    break
+
         self.close()
+
+        # Copy log to output folder
+        if output_path is not None: 
+            if output_path and log_file:
+                shutil.copy(log_file, output_path)
 
 
 def copy_parfile(parfile_path, output_path):
