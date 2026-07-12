@@ -4,13 +4,18 @@ This guide helps users who have the code installed and want to run inversions on
 
 ## Quick Start
 
-Run an inversion from the command line:
+Run an inversion from the command line (from the repository root):
 
 ```bash
-python main.py parfile_transd_synth1.txt 42
+python main.py parfiles/parfile_transd_synth1.txt 42
 ```
 
-where, for instance, `parfile_transd_synth1.txt` is the parameter file and `42` is a random seed for reproducibility. Use `--no-logging` to disable console output.
+where `parfiles/parfile_transd_synth1.txt` is the parameter file and `42` is a random seed for reproducibility.
+
+Optional flags:
+
+- `--no-logging` — disable logging entirely
+- `--plot` — display and save metrics plots once the inversion completes
 
 
 ## What You Need
@@ -25,13 +30,19 @@ Before running, prepare the following files:
 
 ## Understanding the Output
 
-Results are saved to the folder specified by `path_output`. Key outputs include:
+Results are written to the folder specified by `path_output`. Model files are only written when `save_plots = True`, and only every `save_interval` iterations; the metrics files below are always written.
 
 | File | Description |
 |------|-------------|
-| `*.vtk` | 3D models at various iterations (viewable in ParaView) |
-| `transd_inversion.log` | Full log of the inversion process |
+| `m_curr*.vts` | Accepted 3D models at saved iterations (structured grid, viewable in ParaView) |
+| `data_calc_*.vtp` | Calculated data response at saved iterations |
+| `data_residuals_*.vtp` | Data residuals (observed minus calculated) at saved iterations |
+| `checkpoint_latest.pkl` / `checkpoint_*.pkl` | Restart checkpoints (written every `checkpoint_interval` iterations) |
+| `metrics_summary.txt`, `metrics_data.csv` | Convergence metrics for the run |
+| `metrics_plot.png` | Metrics plot (only when `--plot` is used) |
 | `parfile_*.txt` | Copy of your parameter file (for reproducibility) |
+
+The log file `log_file.log` is written to the directory you launch the command from (the working directory), not to `path_output`.
 
 
 ## Parameter File Reference
@@ -56,25 +67,40 @@ The parameter file is organized into sections. Below is a description of each pa
 | Parameter | Description |
 |-----------|-------------|
 | `sensit_type` | Type of data: `grav` (gravity) or `magn` (magnetic) |
-| `unit_conv` | Convert gravity units to mGal (`True`/`False`) — set `False` for magnetic data |
+| `unit_conv` | Apply a 1e2 factor to convert gravity data to mGal (`True`/`False`) — set `False` for magnetic data |
 | `use_mask_domain` | Restrict perturbations using a domain mask (`True`/`False`) |
 | `num_epochs` | Number of MCMC iterations (model proposals) |
 | `use_loaded_mask` | Load mask from file instead of generating one (`True`/`False`) |
+
+### [PreProcessingParameters]
+
+| Parameter | Description |
+|-----------|-------------|
+| `ind_unit_mask` | Index of the rock unit (ordered by increasing density) used to define the perturbation mask |
+| `distance_max` | Maximum distance, in number of cells, from that unit's outline within which perturbations are allowed |
+
+### [SaveOutput]
+
+| Parameter | Description |
+|-----------|-------------|
+| `save_plots` | Whether models are written to disk (`True`/`False`) |
+| `save_interval` | Number of iterations between saved models (`1` saves every model) |
+| `checkpoint_interval` | Number of iterations between restart checkpoints (optional; defaults if omitted) |
 
 ### [SamplingParams]
 
 | Parameter | Description |
 |-----------|-------------|
-| `indices_unit_pert` | Comma-separated indices of units to perturb (e.g., `0,1,2`) |
+| `indices_unit_pert` | Comma-separated indices of units to perturb (e.g., `0,1,2`), or `all` |
 | `ind_unit_force` | Index of unit for forced perturbations (`None` to disable) |
 | `ind_unit_ref` | Index of reference unit for guided changes (`None` to disable) |
 | `n_births_max` | Maximum number of new units that can be born |
 | `force_pert_type` | Type of forced perturbation: `petrophy_increase`, `petrophy_decrease`, `geometry`, or `None` |
 | `use_dynamic_mask` | Update perturbation mask during sampling (`True`/`False`) |
-| `std_data_fit` | Standard deviation for data likelihood (controls data fit weight) |
-| `std_petro` | Standard deviation for petrophysical perturbations |
-| `std_geom_glob` | Weight of prior model term in cost function |
-| `force_pert_0` | Probability of forcing acceptance for type 0 (forced) perturbations |
+| `std_data_fit` | Standard deviation of the data likelihood. Larger values loosen the data fit (more proposals accepted); smaller values tighten it (fewer accepted) |
+| `std_petro` | Standard deviation for petrophysical values/perturbations |
+| `std_geom_glob` | Weight of the prior (geometric) model term in the cost function |
+| `force_pert_0` | Probability of forcing acceptance for type 0 (user-defined) perturbations |
 | `force_pert_1` | Probability of forcing acceptance for type 1 (geometric) perturbations |
 | `force_pert_2` | Probability of forcing acceptance for type 2 (petrophysical) perturbations |
 | `force_pert_3` | Probability of forcing acceptance for type 3 (birth) moves |
@@ -88,7 +114,8 @@ These parameters control the correlated random fields used for geometric perturb
 |-----------|-------------|
 | `factor_spectrum_min/max` | Range for spectral power factor (controls blob size) |
 | `amplitude_pert_min/max` | Range for perturbation amplitude |
-| `normalise` | Normalize noise values before scaling (`True`/`False`) |
+| `weights` | Optional local weights multiplying the noise values (can act as a mask); `None` for uniform |
+| `normalise` | Normalise noise values before scaling (`True`/`False`) |
 | `correlation_length_0/1/2` | Correlation lengths along z, x, y axes |
 | `corr_zx`, `corr_zy`, `corr_xy` | Cross-correlation between dimensions (0 to 1) |
 | `rotation_angle_0/1/2` | Rotation angles around z, x, y axes (degrees) |
@@ -109,10 +136,10 @@ At each iteration, the sampler randomly selects one of five perturbation types:
 | 0 | Forced | Apply pre-defined changes (optional, for guided inversion) |
 | 1 | Geometric | Modify unit boundaries using correlated random fields |
 | 2 | Petrophysical | Change property values (density/susceptibility) within units |
-| 3 | Birth | Add a new geological unit at high-gradient locations |
+| 3 | Birth | Add a new geological unit where the data-misfit gradient is high |
 | 4 | Death | Remove an existing unit |
 
-For each proposal, the algorithm computes the forward response and uses a **Metropolis-Hastings acceptance criterion** based on data fit and prior constraints. The model dimension can change during sampling (trans-dimensional), allowing the number of geological units to be determined by the data.
+For each proposal, the algorithm computes the forward response and evaluates a Metropolis-Hastings acceptance ratio combining the data likelihood and the prior terms. Each move type can additionally be force-accepted with a user-set probability (the `force_pert_*` parameters), which breaks detailed balance and makes the chain non-reversible, favouring broad exploration over a calibrated posterior sample. The model dimension can change during sampling (trans-dimensional), allowing the number of geological units to be driven by the data.
 
 ### Level Set Parameterization
 
@@ -126,11 +153,16 @@ Unlike traditional cell-based inversions, this framework uses **signed distance 
 ## Tips for New Users
 
 1. **Start with the example** — Run the provided synthetic example to understand the workflow before using your own data
-2. **Start with few epochs** — Use `num_epochs = 20-50` initially to check that everything works before running longer chains
-3. **Tune acceptance rates** — If models rarely change, decrease `std_data_fit`; if they change too chaotically, increase it
-4. **View results in ParaView** — Open the `.vtk` files to visualize how the model evolves, and analyse plots produced by the Python scripts to assess convervence or make a diagnonis on potential issues.
+
+2. **Check your sensitivity matrix** — Ensure it matches your model grid dimensions
+
+3. **Start with few epochs** — Use `num_epochs = 20-50` initially to check that everything works before running longer chains
+
+4. **Tune acceptance rates** — If models rarely change, increase `std_data_fit`; if they change too chaotically, decrease it
+
+5. **View results in ParaView** — Open the `.vts` and `.vtp` files to visualize how the model evolves
 
 
 ## Reproducibility
 
-The code automatically saves the random seed and a copy of your parameter file to the output directory. To reproduce a run exactly, use the same seed and parameter file.
+The code automatically saves the random seed (in the log) and a copy of your parameter file to the output directory. To reproduce a run exactly, use the same seed and parameter file.
