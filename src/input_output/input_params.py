@@ -90,6 +90,7 @@ class SavePars:
     save_plots: bool = False
     path_output: str | Path | None = None
     save_interval: int = None
+    checkpoint_interval: int = 3000
 
     filename_model_save_rt: str = "m_curr"
     filename_aux_save_rt: str = "mod_aux"
@@ -390,6 +391,8 @@ class InputParameters:
     save_plots: bool = False
     # Interval along the chain ie num of iterations the models will be saved. 
     save_interval: int = 100 
+    # Interval (iterations) at which a checkpoint is saved to allow restart.
+    checkpoint_interval: int = 10000
     # ------------------------------------
     # Section 'SamplingParams'.
     # ------------------------------------
@@ -491,12 +494,16 @@ def maybestr(value: str):
 
 
 def int_or_intlist(value: str):
+    # TODO should this function's name and usage be changed? 
     if value is None:
         raise ValueError("indices_unit_pert must not be None")
 
     value = value.strip()
     if not value:
         raise ValueError("indices_unit_pert cannot be an empty string")
+
+    if value.lower() == "all":
+        return "all"
 
     if ',' in value:
         return [int(x.strip()) for x in value.split(',')]
@@ -520,7 +527,7 @@ def read_input_parameters(parfile_path, log_run, par=None):
             raise ValueError("Failed to open/find a parameters file!")
 
         par = InputParameters()
-        log_run.info("Reading PARFILE")
+        log_run.info("PARFILE")
 
         def log_config_section(log_run, config, section):
             log_run.info(f"\n------ {section} ------")
@@ -567,7 +574,8 @@ def read_input_parameters(parfile_path, log_run, par=None):
         section = 'SaveOutput'
         log_config_section(log_run, config, section)
         par.save_plots = config.getboolean(section, 'save_plots', fallback=par.save_plots)
-        par.save_interval  = config.getint(section, 'save_interval', fallback=par.save_interval )
+        par.save_interval  = config.getint(section, 'save_interval', fallback=par.save_interval)
+        par.checkpoint_interval = config.getint(section, 'checkpoint_interval', fallback=par.checkpoint_interval)
 
         # ---- SamplingParams ----
         section = 'SamplingParams'

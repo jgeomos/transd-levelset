@@ -17,7 +17,8 @@ def select_random_index(rng_main_, indices):
     if len(indices) == 1:
         return int(indices[0])
     
-    return rng_main_.choice(indices, size=1, replace=False).astype(int)
+    return int(rng_main_.choice(indices, size=1, replace=False)[0])
+    # return rng_main_.choice(indices, size=1, replace=False).astype(int)
 
 
 def sample_uniform(min_value, max_value, rng_s, round_perc=0.):

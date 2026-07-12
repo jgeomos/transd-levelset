@@ -34,12 +34,11 @@ from src.forward_solver.tomofast_sensit import TomofastxSensit
 import src.input_output.tomofast_reading_utils as tu
 import src.input_output.input_params as input_params
 import src.input_output.output_manager as om
-
+import src.model_state as ms
 import src.utils.plot_utils as ptu
 
 import src.transd_solver as ts
 import src.petro_state as psm
-import src.model_state as ms
 import src.inversion_metrics as im
 import src.birth_death as bd
 
@@ -62,7 +61,7 @@ reload(psm)
 reload(bd)
 
 
-def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = ""):
+def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = "", restart_from=None):
     """
     Execute the trans-dimensional inversion workflow.
 
@@ -154,7 +153,9 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                     filename_model_save_rt='m_curr', 
                                     filename_aux_save_rt='mod_aux',
                                     save_plots=par.save_plots,
-                                    save_interval = par.save_interval)  # TODO Should SavePars go in output_manager instead of input_params?
+                                    save_interval = par.save_interval,
+                                    checkpoint_interval=par.checkpoint_interval
+                                    )  # TODO Should SavePars go in output_manager instead of input_params?
     
     # Get normalized cell size ratios.
     # [spacing_z, spacing_y, spacing_x] = gpars.get_spacing(normalise=True)
@@ -174,10 +175,11 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     # Read models and model grid.
     local_weights_filename = par.local_weights_filename
     # mvars.m_start: starting point for the nullspace navigation (unperturbed model).
-    mvars.m_start, gpars = tu.read_tomofast_model(model_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
+    mvars.m_start, gpars = tu.read_tomofast_model(model_filename, gpars, path=folder_transd, 
+                                                  convert_coords_to_km=convert_coords_to_km, log_run=log_run)
 
-    local_weights_prior, _ = tu.read_tomofast_model(local_weights_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
-
+    local_weights_prior, _ = tu.read_tomofast_model(local_weights_filename, gpars, path=folder_transd, 
+                                                    convert_coords_to_km=convert_coords_to_km, log_run=log_run)
     # ----------------------------------------------------------------------------------
     # Pre-processing parameters: definition of mask.
     # Index of rock unit for perturbation and null space analysis (rocks indexed by increasing density).
@@ -229,12 +231,13 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                             )  
 
     # Load model perturbation: the model change we want to impose (the final model should have this change).
-    mvars.delta_m_orig, _ = tu.read_tomofast_model(perturbation_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
+    mvars.delta_m_orig, _ = tu.read_tomofast_model(perturbation_filename, gpars, path=folder_transd, 
+                                                   convert_coords_to_km=convert_coords_to_km, log_run=log_run)
 
     # Load the mask. 
     if par.use_loaded_mask: 
-        mvars.loaded_mask, _ = tu.read_tomofast_model(mask_filename, gpars, path=folder_transd, convert_coords_to_km=convert_coords_to_km)
-
+        mvars.loaded_mask, _ = tu.read_tomofast_model(mask_filename, gpars, path=folder_transd, 
+                                                      convert_coords_to_km=convert_coords_to_km, log_run=log_run)
     # Initialise models for sampling.
     mvars.m_curr = mvars.m_start.copy()
     mvars.init_tmp()
@@ -312,9 +315,30 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     om.save_model_to_vtk(mvars.delta_m_orig, gpars, filename=spars.path_output + '/' + 'delta_m_orig', save=spars.save_plots)
     om.save_model_to_vtk(mvars.mod_aux, gpars, filename=spars.path_output + '/' + 'mod_aux', save=spars.save_plots)
 
+    # Restore state from a checkpoint if requested.
+    i_start = 0
+    if restart_from is not None:
+        log_run.info(f"Restoring state from checkpoint: {restart_from}")
+        state = om.load_checkpoint(restart_from)
+        mvars.m_curr = state['m_curr']
+        mvars.phi_curr = state['phi_curr']
+        mvars.update_prev(accepted=True)  # sync phi_prev / m_prev with restored phi_curr / m_curr
+        petrovals._tracked_state = state['tracked_state']
+        rng_main.bit_generator.state = state['rng_state']
+        metrics_state = state['metrics_state']
+        for key, val in metrics_state.items():
+            setattr(metrics, key, val if not isinstance(val, list) else list(val))
+        # n_births is local to pertub_scalar_fields, so pass through:
+        i_start = state['iteration'] + 1
+        n_births_restored = state['n_births']
+        log_run.info(f"Restored at iteration {state['iteration']}; resuming at iteration {i_start} "
+                     f"with petrovals.n_units_total={petrovals.n_units_total}, n_births={n_births_restored}")
+    else:
+        n_births_restored = None
 
     # Perturbations for the scalar fields. 
-    ts.pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_config, birth_params, run_config, spars, rng_main, geophy_data, sensit, log_run)
+    ts.pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_config, birth_params, run_config, spars, rng_main, geophy_data, sensit, log_run,
+                         i_start=i_start, n_births_restored=n_births_restored)
 
     # Save last model using Tomofast-x format. 
     # om.save_model_tomofast(model_filename, mvars.m_curr, destination_file="data/models/result_last_model.txt")

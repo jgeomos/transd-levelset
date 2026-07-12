@@ -335,6 +335,16 @@ class PetroStateManager:
         self._tracked_state["last_op"] = ("remove", id_remove)
         self._resort()
 
+    def get_value_by_index(self, ind):
+            """Return mapping entry for the element at current sorted index `ind`.
+            
+            Unlike get_value_by_orig_index, this works for birthed units too.
+            """
+            if ind < 0 or ind >= len(self._tracked_state["items"]):
+                raise IndexError(f"Index {ind} is out of bounds")
+            uid = self._tracked_state["items"][ind][1]  # unique id is at position 1
+            return self._tracked_state["mapping"][uid]
+
     def modify_value_by_index(self, ind: int, new_value: float)-> None:
         """Modify a petrophysical value by its current sorted index."""
         if ind < 0 or ind >= len(self._tracked_state["items"]):

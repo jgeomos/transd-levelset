@@ -16,7 +16,7 @@ def load_sensit_from_tomofastx(sensit_path, nbproc, empty_sensit_class, type="gr
     """
 
     if path is not None: 
-        sensit_path = path + "\\" + sensit_path
+        sensit_path = path + "/" + sensit_path
 
     if type == "grav":
         prefix_sensit_name = "sensit_grav_"
@@ -176,7 +176,7 @@ def read_tomofast_data(geophy_data, filename, data_type, path=None):
         return None
 
     if path is not None: 
-        filename = path  + "\\" + filename
+        filename = path  + "/" + filename
 
     data = np.loadtxt(filename, skiprows=1)
 
@@ -203,7 +203,7 @@ def read_tomofast_model(filename, mpars, path=None, convert_coords_to_km=True):
         return None, None
 
     if path is not None: 
-        filename = path  + "\\" + filename
+        filename = path  + "/" + filename
 
     # Check if the file exists.
     if not os.path.exists(filename):

@@ -544,6 +544,47 @@ def update_signed_distance_all(phi_ls, d_phi_ls):
     return phi_ls
 
 
+def calc_signed_distances_local(m_curr, m_prev, phi_prev, drho0, cell_size, margin=4):
+    """
+    Recalculate signed distances only in region around changed cells.
+    """
+    changed_mask = m_curr != m_prev
+    
+    if not np.any(changed_mask):
+        return phi_prev.copy()
+    
+    # Bounding box of changed region + margin for FMM propagation
+    coords = np.where(changed_mask)
+    bounds = [(max(0, c.min() - margin), min(s, c.max() + margin + 1))
+              for c, s in zip(coords, m_curr.shape)]
+    slices = tuple(slice(lo, hi) for lo, hi in bounds)
+    
+    subgrid_shape = tuple(hi - lo for lo, hi in bounds)
+    
+    changed_values = np.unique(np.concatenate([
+        m_curr[changed_mask], 
+        m_prev[changed_mask]
+    ]))
+    
+    signdist = phi_prev.copy()
+    
+    for i in range(drho0.size):
+        if drho0[i] in changed_values:
+            sub_model = m_curr[slices]
+            binary_sub = np.where(sub_model == drho0[i], 1.0, -1.0).astype(np.float32)
+            if binary_sub.min() < 0 and binary_sub.max() > 0:
+                # Local FMM is well-defined.
+                sub_signed = skfmm.distance(binary_sub, cell_size, order=2, periodic=False)
+                signdist[i][slices] = sub_signed
+            else:
+                # No zero contour in the slice (unit i absent from, or filling, the slice).
+                # Fall back to global recomputation for this unit.
+                binary_full = np.where(m_curr == drho0[i], 1.0, -1.0).astype(np.float32)
+                signdist[i] = skfmm.distance(binary_full, cell_size, order=2, periodic=False).astype(np.float32)
+    
+    return signdist.astype(np.float32)
+
+
 def calc_signed_distances(mod_dens_const, drho0, cell_size=[1, 1, 1], narrow=False):
     """
     Calculates the signed distances from the given parameters using the Fast Marching Method (FMM).

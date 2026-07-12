@@ -362,30 +362,52 @@ def perturb_petro(petrovals, index_unit_pert_, rng_seed, max_attempts=100):
     """
     
     base_value = petrovals.all_values[index_unit_pert_]
-    attempted = set(petrovals.all_values) 
+    other_values = np.array([v for i, v in enumerate(petrovals.all_values) if i != index_unit_pert_])
+    collision_atol = 1e-6
+    round_perc = 0.
 
-    petro_pert = 0.0
-    attempts = 0
-
-    while petro_pert == 0.0 and attempts < max_attempts:
-        if petrovals.distro_type == 'uniform':  
-            petro_pert = st.sample_uniform(- petrovals.std_petro, + petrovals.std_petro, rng_seed, round_perc=0.005)
+    for _ in range(max_attempts):
+        if petrovals.distro_type == 'uniform':
+            petro_pert = st.sample_uniform(-petrovals.std_petro, +petrovals.std_petro, rng_seed, round_perc=round_perc)
         elif petrovals.distro_type == 'gaussian':
-            petro_pert = st.sample_gaussian(mu=0.0, sigma=petrovals.std_petro, rng_s=rng_seed, round_perc=0.005)
-        else: 
+            petro_pert = st.sample_gaussian(mu=0.0, sigma=petrovals.std_petro, rng_s=rng_seed, round_perc=round_perc)
+        else:
             raise qc.ParameterValidationError(f"Invalid distribution type: {petrovals.distro_type}. Must be 'uniform' or 'gaussian'.")
-        attempts += 1
 
-    if petro_pert == 0.0:
-        raise qc.NucleationError("Unable to generate non-zero perturbation")
-    
-    new_value = base_value + petro_pert
+        if petro_pert == 0.0:
+            continue
 
-    # Ensure the new value is not already in all_values
-    if new_value not in attempted:
+        new_value = base_value + petro_pert
+        if len(other_values) > 0 and np.any(np.isclose(new_value, other_values, atol=collision_atol)):
+            continue
+
         return new_value
-    else:
-        raise qc.NucleationError(f"Could not generate a perturbation leading to a new unit! Attempted: {len(attempted)} values")
+
+    raise qc.NucleationError(
+        f"Could not generate a non-colliding perturbation after {max_attempts} attempts "
+        f"(base={base_value:.6f}, n_other_units={len(other_values)})"
+    )
+
+
+def _pick_unit_to_perturb(petrovals, indices_unit_pert, rng_main):
+    """Pick a random unit to perturb.
+    
+    With indices_unit_pert == 'all', any current unit is eligible (originals + births).
+    Otherwise, picks an original index from the provided list.
+    
+    Returns
+    -------
+    (orig_idx, ind_curr) : tuple
+        orig_idx : int or None — original array index (None for birthed units).
+        ind_curr : int — current sorted index in petrovals.
+    """
+    if indices_unit_pert == 'all':
+        ind_curr = int(rng_main.integers(0, petrovals.n_units_total))
+        return petrovals.get_value_by_index(ind_curr)['orig_ind'], ind_curr
+
+    orig_idx = int(st.select_random_index(rng_main, indices=indices_unit_pert))
+    ind_curr = petrovals.get_value_by_orig_index(orig_idx)['ind']
+    return orig_idx, ind_curr
 
 
 def _apply_petrophysical_perturbation(petrovals, mvars, metrics, shpars, pert_index_force, rng_main, 
@@ -442,18 +464,19 @@ def _apply_petrophysical_perturbation(petrovals, mvars, metrics, shpars, pert_in
         index_unit_pert_curr = shpars.ind_unit_force
         while shpars.ind_unit_force == index_unit_pert_curr:
             log_run.info("Making a different choice of unit to pert (petrophy pert)")
-            index_unit_pert_curr = st.select_random_index(rng_main, indices=shpars.indices_unit_pert)
+            index_unit_pert_curr, index_unit_pert_update = _pick_unit_to_perturb(petrovals, 
+                                                                                 shpars.indices_unit_pert, 
+                                                                                 rng_main)
             index_tmp = index_unit_pert_curr
-            old_dens = petrovals.get_value_by_orig_index(index_unit_pert_curr)['val']
+            old_dens = petrovals.get_value_by_index(index_unit_pert_update)['val']
     else:
-        index_unit_pert_curr = st.select_random_index(rng_main, indices=shpars.indices_unit_pert)
-        index_tmp = index_unit_pert_curr.copy()
-        old_dens = petrovals.get_value_by_orig_index(index_unit_pert_curr)['val']
+        index_unit_pert_curr, index_unit_pert_update = _pick_unit_to_perturb(petrovals, 
+                                                                             shpars.indices_unit_pert, 
+                                                                             rng_main)
+        index_tmp = index_unit_pert_curr
+        old_dens = petrovals.get_value_by_index(index_unit_pert_update)['val']
 
     log_run.info(f"Perturbation of DENSITY for unit (original index): {index_unit_pert_curr}, with OLD density = {old_dens}")
-
-    # Get index in updated petro dict. 
-    index_unit_pert_update = petrovals.get_value_by_orig_index(index_unit_pert_curr)['ind']
 
     petro_pert_curr = perturb_petro(petrovals, index_unit_pert_update, rng_main)
     log_run.info(f"Perturbation of DENSITY for unit (current index) : {index_unit_pert_update}, with NEW density =  {petro_pert_curr}")
@@ -575,8 +598,11 @@ def _apply_forced_perturbation(petrovals, mvars, metrics, shpars, spars, gpars, 
             # mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
             #                                             cell_size=[1, 1, 1], narrow=True, log_run=log_run)
 
-            mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
-                                                        cell_size=[1, 1, 1], narrow=True, log_run=log_run)
+            # mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+            #                                             cell_size=[1, 1, 1], narrow=True, log_run=log_run)
+
+            mvars.phi_curr = tu.calc_signed_distances_local(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+                                                        cell_size=[1, 1, 1], margin=3)
 
         jj += 1
         if jj >= 25:
@@ -654,10 +680,10 @@ def _apply_geometrical_perturbation(petrovals, mvars, metrics, shpars, spars, ph
         # Get a rock unit at random and apply perturbation to it.
         # print(shpars.indices_unit_pert)
         # print(type(shpars.indices_unit_pert))
-        
-        index_unit_pert_curr = st.select_random_index(rng_main_=rng_main, indices=shpars.indices_unit_pert)
-        
-        index_unit_pert_update = petrovals.get_value_by_orig_index(index_unit_pert_curr)['ind']
+
+        index_unit_pert_curr, index_unit_pert_update = _pick_unit_to_perturb(petrovals, 
+                                                                             shpars.indices_unit_pert, 
+                                                                             rng_main)
         log_run.info(f"Perturbation of GEOMETRY for unit (current index) : {index_unit_pert_update}")
 
         if shpars.use_loaded_mask:
@@ -670,6 +696,12 @@ def _apply_geometrical_perturbation(petrovals, mvars, metrics, shpars, spars, ph
         mvars.phi_curr[index_unit_pert_update, :, :, :] += pert_phi * interface
         # Get the perturbed petrophysical model.
         mvars.m_curr = tu.get_density_model(petrovals.all_values, mvars.phi_curr)
+
+        # Reject perturbations that eliminate a unit (geometry moves must not change unit count).
+        if len(np.unique(mvars.m_curr)) < len(petrovals.all_values):
+            log_run.info(f"Geometrical perturbation killed a unit (proposed pert. of unit {index_unit_pert_update}): reverting and retrying.")
+            mvars.revert_to_prev()
+            continue
 
         fcu.calc_geophy_data(geophy_data, sensit, mvars.m_curr)
         metrics.calc_data_rms_misfit(geophy_data, ind=i)
@@ -695,8 +727,13 @@ def _apply_geometrical_perturbation(petrovals, mvars, metrics, shpars, spars, ph
     # Calculate updated signed distances to calculate prior model cost.
     # mvars.phi_curr = tu.calc_signed_distances_opti(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
     #                                                cell_size=gpars.cell_sizes, narrow=True, log_run=log_run)
-    mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, 
-                                                   cell_size=gpars.cell_sizes, narrow=False)
+    # mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, 
+    #                                                cell_size=gpars.cell_sizes, narrow=False)
+
+    mvars.phi_curr = tu.calc_signed_distances_local(mvars.m_curr, mvars.m_prev, mvars.phi_prev, petrovals.all_values, 
+                                                cell_size=[1, 1, 1], margin=3)
+
+
     return True
 
 
@@ -763,12 +800,18 @@ def _apply_birth(birth_params, petrovals, mvars, metrics, gpars, spars, resid_ve
         _birth_deterministic(birth_params, metrics.data_misfit[i-1], sensit, 
                             geophy_data, resid_vect, mvars, log_run)
     
-    if birth and (densconst_birth != None):
+    if birth and (densconst_birth is not None):
+        
+        log_run.info(f"Birth with value = {densconst_birth}.")
+        densconst_birth = float(np.asarray(densconst_birth).item())
+        
         # Insert petro value of new unit into the tracked array. 
         new_id = petrovals.insert_value(densconst_birth)
         # Calculate signed distances of new model for calculation of prior model cost. 
         mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, cell_size=gpars.cell_sizes, narrow=False)
-        log_run.info(f"Birth with value = {densconst_birth} for with index {new_id}")
+        log_run.info(f"  [birth] inserted id={new_id}, value={densconst_birth}, "
+                     f"petrovals now={petrovals.n_units_total}, phi_curr now={mvars.phi_curr.shape[0]}")
+        
     else: 
         log_run.info(f"No birth!!")
         metrics.data_misfit[i] = metrics.data_misfit[i-1]
@@ -908,10 +951,25 @@ def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, geophy_
                                                               np.array([petrovals.all_values[shpars.ind_unit_force]]), 
                                                               cell_size=gpars.cell_sizes, narrow=True, log_run=log_run)
 
-    if pert_type == 4:  
-            n_births -= 1 
-            petrovals.resync_with_model(mvars.m_curr)
-            mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, cell_size=gpars.cell_sizes, narrow=False)  # TODO restrict only to affected units.
+    if pert_type == 4: 
+
+        # For debug. 
+        n_pre = petrovals.n_units_total
+        n_unique_m_pre = len(np.unique(mvars.m_curr))
+
+        n_births -= 1 
+        petrovals.resync_with_model(mvars.m_curr)
+
+        # For debug. 
+        n_post = petrovals.n_units_total
+        log_run.info(f"  [pert4 resync] petrovals: {n_pre}→{n_post}, "
+                        f"m_curr unique: {n_unique_m_pre}, "
+                        f"delta={n_pre - n_post}")
+        mvars.phi_curr = tu.calc_signed_distances(mvars.m_curr, petrovals.all_values, cell_size=gpars.cell_sizes, narrow=False)  # TODO restrict only to affected units.
+
+        # For debug.
+        log_run.info(f"  [pert4 phi_recalc] phi_curr now={mvars.phi_curr.shape[0]}")
+        
 
     return n_births
 
@@ -1075,11 +1133,18 @@ def _apply_death(mvars, petrovals, geophy_data, sensit, log_run=None):
         
         success = True
 
+    # For debug. 
+    # End of _apply_death, just before return
+    n_unique_m = len(np.unique(mvars.m_curr))
+    log_run.info(f"  [death] killed item_id={item_id} (kill_too_weak={kill_too_weak}), "
+                    f"m_curr unique values={n_unique_m}, "
+                    f"petrovals={petrovals.n_units_total} (UNCHANGED until resync)")
+
     return kill_too_weak, success, True
 
 
 def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_config, birth_params, run_config, spars, rng_main, 
-                          geophy_data, sensit, log_run):
+                          geophy_data, sensit, log_run, i_start=0, n_births_restored=None):
     if DEBUG: 
         log_run.info("Using DEBUG: execution a bit slower!")
 
@@ -1089,14 +1154,15 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
     # Get index of units corresponding to pert.
     pert_index_force = petro_index_force_pert(force_pert_type, petrovals)
     
-    n_births = 0  # No birth occured at the beginning of sampling.
+    # Accomodate the case where a prior run is loaded. 
+    n_births = n_births_restored if n_births_restored is not None else 0
     n_births_max = birth_params.n_births_max  
 
     accept = True
 
     last_clear = time.time()
     clear_notebook_time = 100  # seconds. 
-    for i in range(shpars.num_epochs):  # Would starting wth i==1 make more sense? 
+    for i in range(i_start, shpars.num_epochs):  # Would starting wth i==1 make more sense? 
 
         # Clear notebook output periodically
         last_clear = om.clear_notebook_periodically(last_clear,
@@ -1105,6 +1171,10 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
                                                     logger=log_run)
 
         log_run.info(f"\n---- STARTING ITERATION {i} ----")
+        log_run.info(f"  [pre-op] phi_curr={mvars.phi_curr.shape[0]}, "
+                     f"petrovals={petrovals.n_units_total}, "
+                     f"n_births={n_births}, "
+                     f"birthed_ids={[t[1] for t in petrovals.tracked_state['items'] if t[2]=='birth']}")
         birth_occured = False 
         death_occured = False
         kill_too_weak = False
@@ -1193,6 +1263,31 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
             om.save_data_to_vtk(geophy_data, datatype_to_save='difference',
                                 filename=spars.path_output + '/data_residuals_'+ str(i), save=True, log_run=log_run)
         
+        # Save checkpoint for potential restart.
+        if i > 0 and i % spars.checkpoint_interval == 0:
+            om.save_checkpoint(spars.path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=log_run)
+        
+        if DEBUG:
+            n_phi = mvars.phi_curr.shape[0]
+            n_petro = petrovals.n_units_total
+            if n_phi != n_petro:
+                log_run.error(
+                    f"\n>>> CONSISTENCY MISMATCH at end of it. {i}: "
+                    f"phi_curr={n_phi}, petrovals={n_petro}, "
+                    f"pert_type={pert_type}, accepted={accept}, "
+                    f"birth_occured={birth_occured}, death_occured={death_occured}, "
+                    f"kill_too_weak={kill_too_weak}"
+                )
+                log_run.error(f"    petrovals.all_values = {petrovals.all_values}")
+                log_run.error(f"    n_births = {n_births}")
+
+                log_run.info("Saving current state of inversion")
+                om.save_checkpoint(spars.path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=log_run)
+
+                # First-occurrence dump: stop after one log to avoid log spam
+                raise qc.ParameterValidationError(
+                    f"Consistency mismatch first appeared at iteration {i}"
+                )
         # if i % 10 == 0:
         #     metrics.track_contacts(mvars.m_curr, gpars.cell_sizes, i)
        

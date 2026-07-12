@@ -498,7 +498,7 @@ def create_section_gif_from_vts(vts_folder,
         else: 
             mod_num = None
         if i==0:
-            slice_data0 = slice_data1.copy()
+            slice_data0 = slice_data1.copy()  # TODO load directly prior model -- safer. 
         if mod_num is not None: 
             save_slice_as_image(slice_data0, slice_data1, 
                                 padding_start, padding_end, 

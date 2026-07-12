@@ -10,8 +10,56 @@ import os
 # import json
 import time
 from IPython.display import clear_output
-import shutil
-import time
+import pickle
+from pathlib import Path
+import copy
+
+# Checkpoint save/load for chain restart.
+def save_checkpoint(path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=None):
+    """Save a pickle checkpoint sufficient to resume the chain at iteration i+1.
+    
+    Two files are written:
+      - checkpoint_latest.pkl  : most recent checkpoint (overwritten each time)
+      - checkpoint_{i:08d}.pkl : iteration-tagged copy (kept for history)
+    """
+    state = {
+        'iteration': i,
+        'm_curr': mvars.m_curr.copy(),
+        'phi_curr': mvars.phi_curr.copy(),
+        'tracked_state': copy.deepcopy(petrovals._tracked_state),
+        'n_births': n_births,
+        'rng_state': rng_main.bit_generator.state,
+        'metrics_state': {
+            'data_misfit': metrics.data_misfit.copy(),
+            'model_misfit': metrics.model_misfit.copy(),
+            'accept_ratio': metrics.accept_ratio.copy(),
+            'log_likelihood': metrics.log_likelihood.copy(),
+            'log_likelihood_ratio': metrics.log_likelihood_ratio.copy(),
+            'log_priorgeom_ratio': metrics.log_priorgeom_ratio.copy(),
+            'log_priorpetro_ratio': metrics.log_priorpetro_ratio.copy(),
+            'log_posterior': metrics.log_posterior.copy(),
+            'n_units_total': metrics.n_units_total.copy(),
+            'petro_values_history': metrics.petro_values_history.copy(),
+            'last_misfit_accepted': metrics.last_misfit_accepted,
+            'last_accepted_model_misfit': metrics.last_accepted_model_misfit,
+            'it_accepted_type': list(metrics.it_accepted_type),
+            'it_accepted_model': list(metrics.it_accepted_model),
+        },
+    }
+    latest = Path(path_output) / "checkpoint_latest.pkl"
+    tagged = Path(path_output) / f"checkpoint_{i:08d}.pkl"
+    with open(tagged, 'wb') as f:
+        pickle.dump(state, f)
+    with open(latest, 'wb') as f:
+        pickle.dump(state, f)
+    if log_run is not None:
+        log_run.info(f"Checkpoint saved at iteration {i}: {tagged}")
+
+
+def load_checkpoint(path):
+    """Load a pickle checkpoint and return the state dict."""
+    with open(path, 'rb') as f:
+        return pickle.load(f)
 
 
 class ConditionalFormatter(logging.Formatter):
@@ -57,7 +105,7 @@ class LogRun:
         This conditional disabling of logging. Create and return a new LogRun instance. If return_none is True, skip object
         creation and return None instead. 
         """
-        print('Logging: deactivated. ')
+        # print('Logging: deactivated. ')
         if return_none:
             print('Logging: deactivated.\n')
             return None  # prevents instance creation entirely
@@ -69,8 +117,6 @@ class LogRun:
         self.logger.setLevel(logging.INFO)
         self.logger.handlers = []  # Clear existing handlers (important for notebooks)
         self.verbose = verbose
-
-        self.start_time = time.time()
 
         file_handler = logging.FileHandler(log_name, mode='w')
         file_handler.setLevel(logging.INFO)
@@ -88,10 +134,6 @@ class LogRun:
         if self.verbose:
             self.info('\n (Logging results: can take slightly longer and create big log files.)')
             self.info('\n--------- Started main script ---------')
-            timestamp = time.time()
-            timestamp = time.time()
-            local_time = time.localtime(timestamp)
-            self.info(f'Started on {time.strftime("%Y-%m-%d at %H:%M:%S", local_time)}')
 
     def info(self, message):
         if self.verbose:
@@ -104,7 +146,7 @@ class LogRun:
         self.logger.error(message)
 
     def close(self):
-        self.info('All done.')
+        self.info('Completed.')
         for handler in self.logger.handlers:
             handler.close()
             self.logger.removeHandler(handler)
@@ -113,33 +155,6 @@ class LogRun:
         error_msg = f"{context}: {type(e).__name__}: {str(e)}"
         self.error(error_msg)
         raise e
-    
-    def log_run_complete(self, output_path=None):
-        """Log completion time, date, and elapsed duration, then close the log."""
-        timestamp = time.time()
-        local_time = time.localtime(timestamp)
-        self.info(f'Completed on {time.strftime("%Y-%m-%d at %H:%M:%S", local_time)}')
-        self.info(f'RUN TIME: {timestamp - self.start_time:.2f} sec')
-
-        # Get log file path before closing
-        if output_path is not None: 
-            log_file = None
-            for handler in self.logger.handlers:
-                if isinstance(handler, logging.FileHandler):
-                    log_file = handler.baseFilename
-                    break
-
-        self.close()
-
-        # Copy log to output folder
-        if output_path is not None: 
-            if output_path and log_file:
-                shutil.copy(log_file, output_path)
-
-
-def copy_parfile(parfile_path, output_path):
-    """Copy parameter file to output folder for reproducibility."""
-    shutil.copy(parfile_path, output_path)
 
 
 def clear_notebook_periodically(last_clear, interval_seconds, iteration=None, logger=None):
