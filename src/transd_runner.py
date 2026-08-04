@@ -233,12 +233,12 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
 
     # Load model perturbation: the model change we want to impose (the final model should have this change).
     mvars.delta_m_orig, _ = tu.read_tomofast_model(perturbation_filename, gpars, path=folder_transd, 
-                                                   convert_coords_to_km=convert_coords_to_km, log_run=log_run)
+                                                   convert_coords_to_km=convert_coords_to_km)
 
     # Load the mask. 
     if par.use_loaded_mask: 
         mvars.loaded_mask, _ = tu.read_tomofast_model(mask_filename, gpars, path=folder_transd, 
-                                                      convert_coords_to_km=convert_coords_to_km, log_run=log_run)
+                                                      convert_coords_to_km=convert_coords_to_km)
     # Initialise models for sampling.
     mvars.m_curr = mvars.m_start.copy()
     mvars.init_tmp()
@@ -251,9 +251,9 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
 
     # Save starting data as VTP
     om.save_data_to_vtk(geophy_data, datatype_to_save='data_calc', 
-                                            filename=spars.path_output + '/data_starting', save=True, log_run=log_run)
+                                            filename=spars.path_output + '/data_starting', save=True)
     om.save_data_to_vtk(geophy_data, datatype_to_save='difference', 
-                                            filename=spars.path_output + '/data_residuals', save=True, log_run=log_run)
+                                            filename=spars.path_output + '/data_residuals', save=True)
     
     #-----------------------------------------------------------------------------------
     # Initialisation. 
