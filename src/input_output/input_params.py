@@ -91,6 +91,7 @@ class SavePars:
     path_output: str | Path | None = None
     save_interval: int = None
     checkpoint_interval: int = 3000
+    latest_interval: int = None
 
     filename_model_save_rt: str = "m_curr"
     filename_aux_save_rt: str = "mod_aux"
@@ -391,8 +392,10 @@ class InputParameters:
     save_plots: bool = False
     # Interval along the chain ie num of iterations the models will be saved. 
     save_interval: int = 100 
-    # Interval (iterations) at which a checkpoint is saved to allow restart.
+    # Interval (iterations) at which a checkpoint for that iteration is saved to allow restart.
     checkpoint_interval: int = 10000
+    # Interval (iterations) at which a checkpoint is saved to allow restart; overwritten everytime. 
+    latest_interval: int = 3000
     # ------------------------------------
     # Section 'SamplingParams'.
     # ------------------------------------
@@ -576,6 +579,7 @@ def read_input_parameters(parfile_path, log_run, par=None):
         par.save_plots = config.getboolean(section, 'save_plots', fallback=par.save_plots)
         par.save_interval  = config.getint(section, 'save_interval', fallback=par.save_interval)
         par.checkpoint_interval = config.getint(section, 'checkpoint_interval', fallback=par.checkpoint_interval)
+        par.latest_interval = config.getint(section, 'latest_interval', fallback=par.latest_interval)
 
         # ---- SamplingParams ----
         section = 'SamplingParams'

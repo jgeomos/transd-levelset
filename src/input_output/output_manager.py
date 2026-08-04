@@ -15,7 +15,8 @@ from pathlib import Path
 import copy
 
 # Checkpoint save/load for chain restart.
-def save_checkpoint(path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=None):
+def save_checkpoint(path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=None,
+                    write_tagged=True, write_latest=True):
     """Save a pickle checkpoint sufficient to resume the chain at iteration i+1.
     
     Two files are written:
@@ -48,12 +49,15 @@ def save_checkpoint(path_output, i, mvars, petrovals, metrics, n_births, rng_mai
     }
     latest = Path(path_output) / "checkpoint_latest.pkl"
     tagged = Path(path_output) / f"checkpoint_{i:08d}.pkl"
-    with open(tagged, 'wb') as f:
-        pickle.dump(state, f)
-    with open(latest, 'wb') as f:
-        pickle.dump(state, f)
+    if write_tagged:
+        with open(tagged, 'wb') as f:
+            pickle.dump(state, f)
+    if write_latest:
+        with open(latest, 'wb') as f:
+            pickle.dump(state, f)
     if log_run is not None:
-        log_run.info(f"Checkpoint saved at iteration {i}: {tagged}")
+        which = "latest" if (write_latest and not write_tagged) else str(tagged)
+        log_run.info(f"Checkpoint saved at iteration {i}: {which}")
 
 
 def load_checkpoint(path):

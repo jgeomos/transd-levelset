@@ -975,7 +975,7 @@ def _update_accepted_state(metrics, petrovals, mvars, shpars, pert_type, geophy_
 
 
 def _restore_previous_state(mvars, petrovals, metrics, pert_type, force_pert_type, index_tmp, 
-                        pert_index_force, i, geophy_data, sensit):
+                        pert_index_force, i, geophy_data, sensit, birth_occured=False):
     """
     Restore state of previous model for model and petrophysical tracker. 
     """
@@ -986,13 +986,19 @@ def _restore_previous_state(mvars, petrovals, metrics, pert_type, force_pert_typ
     # Re-calculate data misfit. TODO: store previous instead of re-calc? 
     fcu.calc_geophy_data(geophy_data, sensit, mvars.m_curr)
 
-    if (pert_type == 2) or (pert_type == 3):
-        # Revert petrophy values to previous ones.
+    if (pert_type == 2):
+        # A petro perturbation always mutates petrovals, so always revert it.
         petrovals.revert_to_prev()
-        if (pert_type == 2):
-            if force_pert_type in ('petrophy_increase', 'petrophy_decrease'):
-                if (index_tmp == pert_index_force):
-                    petrovals.pert = petrovals.get_value_by_orig_index(pert_index_force)['val']
+        if force_pert_type in ('petrophy_increase', 'petrophy_decrease'):
+            if (index_tmp == pert_index_force):
+                petrovals.pert = petrovals.get_value_by_orig_index(pert_index_force)['val']
+
+    elif (pert_type == 3) and birth_occured:
+        # Only revert when a unit was actually inserted this iteration. A no-op
+        # birth leaves petrovals untouched; calling revert_to_prev() here would
+        # act on the stale last_op slot and delete an earlier accepted unit,
+        # desyncing petrovals from phi_curr.
+        petrovals.revert_to_prev()
 
     if (pert_type == 0) and (force_pert_type in ('petrophy_increase', 'petrophy_decrease')):
         petrovals.revert_to_prev()
@@ -1247,7 +1253,7 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
                                     birth_occured, n_births, gpars, spars, i, log_run)
         elif not accept: 
             _restore_previous_state(mvars, petrovals, metrics, pert_type, force_pert_type, index_tmp, 
-                                    pert_index_force, i, geophy_data, sensit)
+                                    pert_index_force, i, geophy_data, sensit, birth_occured=birth_occured)
             
         metrics.n_units_total[i] = petrovals.n_units_total
         metrics.petro_values_history[i, :] = petrovals.get_original_values()
@@ -1264,9 +1270,15 @@ def pertub_scalar_fields(petrovals, mvars, metrics, shpars, gpars, phipert_confi
                                 filename=spars.path_output + '/data_residuals_'+ str(i), save=True, log_run=log_run)
         
         # Save checkpoint for potential restart.
+        latest_interval = spars.latest_interval or spars.checkpoint_interval
         if i > 0 and i % spars.checkpoint_interval == 0:
-            om.save_checkpoint(spars.path_output, i, mvars, petrovals, metrics, n_births, rng_main, log_run=log_run)
-        
+            om.save_checkpoint(spars.path_output, i, mvars, petrovals, metrics, n_births, rng_main,
+                               log_run=log_run, write_tagged=True, write_latest=True)
+            
+        # More frequent latest-only checkpoint for fine-grained restart.
+        elif i > 0 and i % latest_interval == 0:
+            om.save_checkpoint(spars.path_output, i, mvars, petrovals, metrics, n_births, rng_main,
+                               log_run=log_run, write_tagged=False, write_latest=True)
         if DEBUG:
             n_phi = mvars.phi_curr.shape[0]
             n_petro = petrovals.n_units_total
