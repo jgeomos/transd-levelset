@@ -154,7 +154,8 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                     filename_aux_save_rt='mod_aux',
                                     save_plots=par.save_plots,
                                     save_interval = par.save_interval,
-                                    checkpoint_interval=par.checkpoint_interval
+                                    checkpoint_interval=par.checkpoint_interval,
+                                    latest_interval=par.latest_interval
                                     )  # TODO Should SavePars go in output_manager instead of input_params?
     
     # Get normalized cell size ratios.
@@ -176,10 +177,10 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
     local_weights_filename = par.local_weights_filename
     # mvars.m_start: starting point for the nullspace navigation (unperturbed model).
     mvars.m_start, gpars = tu.read_tomofast_model(model_filename, gpars, path=folder_transd, 
-                                                  convert_coords_to_km=convert_coords_to_km, log_run=log_run)
+                                                  convert_coords_to_km=convert_coords_to_km)
 
     local_weights_prior, _ = tu.read_tomofast_model(local_weights_filename, gpars, path=folder_transd, 
-                                                    convert_coords_to_km=convert_coords_to_km, log_run=log_run)
+                                                    convert_coords_to_km=convert_coords_to_km)
     # ----------------------------------------------------------------------------------
     # Pre-processing parameters: definition of mask.
     # Index of rock unit for perturbation and null space analysis (rocks indexed by increasing density).
