@@ -84,38 +84,17 @@ class PlotParameters:
 
 def plot_model_sections(model, gpars, ix=None, iy=None, iz=None,
                         clim=None, cmap='viridis', figsize=(15, 4.5),
-                        coord_unit='m'):
+                        coord_unit='m', axes=None):
     """
     Plot three orthogonal sections (constant x, y and z) through a 3-D model.
 
-    Parameters
-    ----------
-    model : ndarray
-        Model values, either flat (nx*ny*nz,) or shaped (nx, ny, nz).
-    gpars : GridParameters
-        Grid parameters providing ``dim`` (nx, ny, nz) and flat cell-centre
-        coordinate arrays ``x``, ``y``, ``z`` (length nx*ny*nz).
-    ix, iy, iz : int or None, optional
-        Cell indices of the constant-x, -y and -z sections. ``None`` (default)
-        selects the middle of the mesh along that axis.
-    clim : array-like of length 2, optional
-        Colour limits (min, max), shared by all panels. Defaults to model min/max.
-    cmap : str, optional
-        Matplotlib colormap name.
-    figsize : tuple, optional
-        Figure size in inches.
-    coord_unit : str, optional
-        Unit label for the coordinate axes (e.g. 'm' or 'km').
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-    axes : ndarray of matplotlib.axes.Axes
+    If ``axes`` (a sequence of 3 Axes) is given, the sections are drawn into
+    them; otherwise a new 1x3 figure is created. All other parameters as before.
     """
     set_plotprops()
 
     nz, ny, nx = gpars.dim
-    vol = np.asarray(model).reshape(gpars.dim)          # (nx, ny, nz)
+    vol = np.asarray(model).reshape(gpars.dim)          # (nz, ny, nx)
 
     ix = nx // 2 if ix is None else ix
     iy = ny // 2 if iy is None else iy
@@ -130,38 +109,37 @@ def plot_model_sections(model, gpars, ix=None, iy=None, iz=None,
         clim = np.array([vol.min(), vol.max()])
 
     u = coord_unit
-    # (data, horiz. coord, vert. coord, title, xlabel, ylabel, aspect, invert depth)
     panels = [
         (vol[:, :, ix], yc, zc, f'X-section (ix={ix}, x={xc[ix]:.0f} {u})', f'y ({u})', f'z ({u})', 'equal',  True),
         (vol[:, iy, :], xc, zc, f'Y-section (iy={iy}, y={yc[iy]:.0f} {u})', f'x ({u})', f'z ({u})', 'equal',  True),
         (vol[iz, :, :], xc, yc, f'Z-section (iz={iz}, z={zc[iz]:.0f} {u})', f'x ({u})', f'y ({u})', 'equal', False),
     ]
 
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    if axes is None:                                    # <-- create own figure...
+        fig, axes = plt.subplots(1, 3, figsize=figsize)
+        own_fig = True
+    else:                                               # ...or draw into given axes
+        fig = axes[0].get_figure()
+        own_fig = False
+
     for ax, (data, hc, vc, title, xlab, ylab, aspect, invert) in zip(axes, panels):
         plt.sca(ax)
         plot_model(ax, hc, vc, data, title, cmap=cmap, clim=clim)
-
         ax.set_xlabel(xlab)
         ax.set_ylabel(ylab)
         ax.set_aspect(aspect)
-
         if invert:
             ax.invert_yaxis()
 
-    # X-section (y,z)
     axes[0].axvline(yc[iy], color='w', ls='--', lw=1.5)
     axes[0].axhline(zc[iz], color='w', ls='--', lw=1.5)
-
-    # Y-section (x,z)
     axes[1].axvline(xc[ix], color='w', ls='--', lw=1.5)
     axes[1].axhline(zc[iz], color='w', ls='--', lw=1.5)
-
-    # Z-section (x,y)
     axes[2].axvline(xc[ix], color='w', ls='--', lw=1.5)
     axes[2].axhline(yc[iy], color='w', ls='--', lw=1.5)
 
-    fig.tight_layout()
+    if own_fig:                                         # <-- only lay out our own figure
+        fig.tight_layout()
     return fig, axes
 
 
@@ -399,7 +377,7 @@ def create_inversion_animation(metrics, gpars, output_dir,
                                padding_end=-10,
                                decimate=4, 
                                dpi=150,
-                               filename_pattern='m_curr_',
+                               filename_pattern='m_curr',
                                max_iteration=None):
     """
     Create animated GIF showing model evolution during inversion.
@@ -431,7 +409,7 @@ def create_inversion_animation(metrics, gpars, output_dir,
         Show every Nth iteration (1 = all, 4 = every 4th)
     dpi : int, default=150
         Resolution of output images
-    filename_pattern : str, default='m_curr_'
+    filename_pattern : str, default='m_curr'
         Pattern for matching VTS files
     max_iteration : int, optional
         Maximum iteration to show. If None, uses all accepted iterations
@@ -607,6 +585,145 @@ def create_section_gif_from_vts(vts_folder,
     print(f"GIF saved to {file_name_gif}")
 
     return file_name_gif
+
+
+
+def create_sections_animation(gpars, metrics, output_dir,
+                              filename='sections_animation.gif',
+                              ix=None, iy=None, iz=None,
+                              clim=None, cmap='viridis', coord_unit='m',
+                              fps=10, filename_pattern='m_curr',
+                              decimate=1, dpi=120, n_bins=30, progress=True):
+    """
+    Animate three orthogonal model sections (top) with, below, the evolution of
+    the data misfit and of the number of units, each paired with a horizontal
+    histogram that shares its vertical axis.
+
+    progress : bool
+        If True, report rendering progress (tqdm bar if available, else prints).
+    """
+    gif_path = os.path.join(output_dir, filename)
+
+    files = [f for f in glob.glob(os.path.join(output_dir, '*.vts'))
+             if filename_pattern in os.path.basename(f)]
+    files = sorted(files, key=natural_sort_key)[::decimate]
+    if not files:
+        raise FileNotFoundError(f"No '{filename_pattern}*.vts' files in {output_dir}")
+
+    n_frames = len(files)
+
+    # Progress iterator: tqdm if present, otherwise a lightweight print fallback.
+    def _progress(iterable):
+        if not progress:
+            return iterable
+        try:
+            from tqdm.auto import tqdm
+            return tqdm(iterable, total=n_frames, desc='Rendering frames')
+        except ImportError:
+            def _gen():
+                for j, item in enumerate(iterable, 1):
+                    print(f'\rRendering frame {j}/{n_frames} '
+                          f'({100 * j / n_frames:.0f}%)', end='', flush=True)
+                    yield item
+                print()
+            return _gen()
+
+    def _read_model(vts_file):
+        reader = vtk.vtkXMLStructuredGridReader()
+        reader.SetFileName(vts_file)
+        reader.Update()
+        return vtk_to_numpy(reader.GetOutput().GetPointData().GetScalars())
+
+    if clim is None:
+        m0 = _read_model(files[0])
+        clim = np.array([m0.min(), m0.max()])
+
+    # Histories, fixed ranges and histogram bins (kept stable across frames).
+    misfit = np.asarray(metrics.data_misfit)
+    nunits = np.asarray(metrics.n_units_total)
+    x = np.arange(len(misfit))
+    x_max = len(misfit) - 1
+    mis_lims = [float(np.nanmin(misfit)), float(np.nanmax(misfit))]
+    nun_lims = [nunits.min() - 0.5, nunits.max() + 0.5]
+
+    mis_bins = np.linspace(mis_lims[0], mis_lims[1], n_bins)
+    nun_bins = np.arange(nunits.min() - 0.5, nunits.max() + 1.5)
+    mis_count_max = np.histogram(misfit, bins=mis_bins)[0].max()
+    nun_count_max = np.histogram(nunits, bins=nun_bins)[0].max()
+
+    tmp_dir = os.path.join(output_dir, 'tmp_sections_frames')
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    frame_paths = []
+    for k, vts in enumerate(_progress(files)):
+        model = _read_model(vts)
+        match = re.search(r'(\d+)(?=\.[^.]+$)', vts)
+        mod_num = int(match.group(1)) if match else k
+        idx = min(mod_num, x_max)
+
+        fig = plt.figure(figsize=(15, 9), constrained_layout=True)
+        outer = gridspec.GridSpec(3, 1, height_ratios=[3, 1, 1], figure=fig)
+
+        gs_sec = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=outer[0])
+        sec_axes = [fig.add_subplot(gs_sec[0, j]) for j in range(3)]
+
+        gs_mis = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer[1], width_ratios=[4, 1])
+        ax_mis  = fig.add_subplot(gs_mis[0, 0])
+        ax_mish = fig.add_subplot(gs_mis[0, 1], sharey=ax_mis)
+
+        gs_nun = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer[2], width_ratios=[4, 1])
+        ax_nun  = fig.add_subplot(gs_nun[0, 0])
+        ax_nunh = fig.add_subplot(gs_nun[0, 1], sharey=ax_nun)
+
+        plot_model_sections(model, gpars, ix=ix, iy=iy, iz=iz,
+                            clim=clim, cmap=cmap, coord_unit=coord_unit, axes=sec_axes)
+
+        # --- data misfit: evolution + horizontal histogram (shared y-axis) ---
+        ax_mis.plot(x[:idx + 1], misfit[:idx + 1])
+        ax_mis.plot(idx, misfit[idx], 'o')
+        ax_mis.set_xlim(0, x_max)
+        ax_mis.set_ylim(mis_lims)
+        ax_mis.set_ylabel('Data misfit')
+        ax_mis.set_title('Evolution of the data misfit')
+        ax_mis.grid(True)
+
+        ax_mish.hist(misfit[:idx + 1], bins=mis_bins, orientation='horizontal')
+        ax_mish.set_xlim(0, mis_count_max * 1.05)
+        ax_mish.set_xlabel('Count')
+        ax_mish.grid(True)
+        plt.setp(ax_mish.get_yticklabels(), visible=False)
+
+        # --- number of units: evolution + horizontal histogram (shared y-axis) ---
+        ax_nun.plot(x[:idx + 1], nunits[:idx + 1])
+        ax_nun.plot(idx, nunits[idx], 'o')
+        ax_nun.set_xlim(0, x_max)
+        ax_nun.set_ylim(nun_lims)
+        ax_nun.locator_params(axis='y', integer=True)
+        ax_nun.set_xlabel('Iteration')
+        ax_nun.set_ylabel('Number of units')
+        ax_nun.set_title('Evolution of the number of units')
+        ax_nun.grid(True)
+
+        ax_nunh.hist(nunits[:idx + 1], bins=nun_bins, orientation='horizontal')
+        ax_nunh.set_xlim(0, nun_count_max * 1.05)
+        ax_nunh.set_xlabel('Count')
+        ax_nunh.grid(True)
+        plt.setp(ax_nunh.get_yticklabels(), visible=False)
+
+        fig.suptitle(f'Model # {mod_num:,}')
+
+        fp = os.path.join(tmp_dir, f'frame_{k:04d}.png')
+        fig.savefig(fp, dpi=dpi)
+        plt.close(fig)
+        frame_paths.append(fp)
+
+    if progress:
+        print(f'Assembling GIF from {n_frames} frames...')
+    imgs = [Image.open(p) for p in frame_paths]
+    imgs[0].save(gif_path, save_all=True, append_images=imgs[1:],
+                 duration=1000 / fps, loop=0)
+    print(f"GIF saved to {gif_path}")
+    return gif_path
 
 
 def create_model_flythrough_gif(model, gpars, output_path,
@@ -951,8 +1068,6 @@ def save_slice_as_image(slice_2d0, slice_2d,
     ax2 = fig.add_subplot(gs[4, 0:2])    # only row 2
 
     ax2.plot(x_misfit[:mod_num], y_misfit[:mod_num])
-    print(mod_num)
-    print(np.shape(x_misfit))
     if len(x_misfit)>1:
         ax2.plot(x_misfit[mod_num-1], y_misfit[mod_num-1], 'o')
 
