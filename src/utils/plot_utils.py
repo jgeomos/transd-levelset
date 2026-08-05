@@ -205,8 +205,9 @@ def plot_metrics(metrics, run_params, data_misfit_lims=np.array([0.25, 5.0]), pr
 
     ax = axes[3, 1] 
     ax.plot(metrics.accept_ratio)
-    ax.axhline(y=0, color='r', linestyle='--', alpha=0.5)
-    ax.axhline(y=1, color='r', linestyle='--', alpha=0.5)
+    ax.axhline(y=1, color='k', linestyle='--', alpha=0.5)
+    ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
+    ax.axhline(y=np.mean(metrics.accept_ratio), color='r', linestyle='--', label='mean')
     ax.set_title('Acceptance Ratio')
     ax.set_xlabel('Iteration')
     ax.grid(True, alpha=0.3)
