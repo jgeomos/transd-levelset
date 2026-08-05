@@ -208,7 +208,7 @@ def run_transd(par, log_run, rng_main, run_config, sensit=None, folder_transd = 
                                             nbproc=tomofast_sensit_nbproc, 
                                             empty_sensit_class=TomofastxSensit,
                                             type=sensit_type, 
-                                            verbose=True, 
+                                            verbose=False, 
                                             path=folder_transd)
         sensit.precompute_all()  # Calculate inverse weights for fwd data calc and cache the transpose of sensit.
 
