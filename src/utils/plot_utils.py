@@ -494,98 +494,97 @@ def create_inversion_animation(metrics, gpars, output_dir,
     return output_path
 
 
-def create_section_gif_from_vts(vts_folder, 
-                                file_name_gif, 
-                                padding_start, padding_end, 
-                                x_misfit, y_misfit, 
-                                max_x_misfit, 
-                                accept_ratio, 
-                                gpars_class, 
-                                axis='z', 
-                                index=None, 
-                                fps=10, 
-                                clim=np.array((2400, 3250)),
-                                required_strings=None, 
-                                files='All', 
-                                dpi=150):
-    """
-    Create a GIF from VTS files in a folder, filtering by strings in filenames.
+# def create_section_gif_from_vts(vts_folder, 
+#                                 file_name_gif, 
+#                                 padding_start, padding_end, 
+#                                 x_misfit, y_misfit, 
+#                                 max_x_misfit, 
+#                                 accept_ratio, 
+#                                 gpars_class, 
+#                                 axis='z', 
+#                                 index=None, 
+#                                 fps=10, 
+#                                 clim=np.array((2400, 3250)),
+#                                 required_strings=None, 
+#                                 files='All', 
+#                                 dpi=150):
+#     """
+#     Create a GIF from VTS files in a folder, filtering by strings in filenames.
 
-    Parameters:
-    - vts_folder (str): Path to folder containing .vts files
-    - file_name_gif (str): Output .gif path
-    - axis (str): Section axis ('x', 'y', 'z')
-    - index (int): Index to extract
-    - duration (float): Duration of each frame in seconds
-    - required_strings (list of str): Substrings that must all be in the filename
-    """
+#     Parameters:
+#     - vts_folder (str): Path to folder containing .vts files
+#     - file_name_gif (str): Output .gif path
+#     - axis (str): Section axis ('x', 'y', 'z')
+#     - index (int): Index to extract
+#     - duration (float): Duration of each frame in seconds
+#     - required_strings (list of str): Substrings that must all be in the filename
+#     """
 
-    # Make file_name_gif contain the output folder. 
-    file_name_gif = vts_folder + "\\" + file_name_gif
+#     # Make file_name_gif contain the output folder. 
+#     file_name_gif = vts_folder + "\\" + file_name_gif
 
-    # Gather all .vts files
-    all_vts_files = glob.glob(os.path.join(vts_folder, '*.vts'))
+#     # Gather all .vts files
+#     all_vts_files = glob.glob(os.path.join(vts_folder, '*.vts'))
 
-    # Filter files based on required substrings
-    if required_strings:
-        filtered_files = [
-            f for f in all_vts_files if all(substring in os.path.basename(f) for substring in required_strings)
-        ]
-    else:
-        filtered_files = all_vts_files
+#     # Filter files based on required substrings
+#     if required_strings:
+#         filtered_files = [
+#             f for f in all_vts_files if all(substring in os.path.basename(f) for substring in required_strings)
+#         ]
+#     else:
+#         filtered_files = all_vts_files
 
-    # Sort naturally (e.g. file1, file2, file10)
-    if files=='All':
-        vts_files = sorted(filtered_files, key=natural_sort_key)  # [::2]  # To do only 20 first plots [:20]
-    else:
-        vts_files = sorted(filtered_files[::files], key=natural_sort_key)  # [::2]  # To do only 20 first plots [:20]
+#     # Sort naturally (e.g. file1, file2, file10)
+#     if files=='All':
+#         vts_files = sorted(filtered_files, key=natural_sort_key)  # [::2]  # To do only 20 first plots [:20]
+#     else:
+#         vts_files = sorted(filtered_files[::files], key=natural_sort_key)  # [::2]  # To do only 20 first plots [:20]
 
-    temp_dir = "temp_slice_images"
-    os.makedirs(temp_dir, exist_ok=True)
+#     temp_dir = "temp_slice_images"
+#     os.makedirs(temp_dir, exist_ok=True)
 
-    # Delete old frames
-    for f in glob.glob(os.path.join(temp_dir, "*.png")):
-        os.remove(f)
-    print('Old  frames: Deleted. ')
+#     # Delete old frames
+#     for f in glob.glob(os.path.join(temp_dir, "*.png")):
+#         os.remove(f)
+#     print('Old  frames: Deleted. ')
 
-    y_lims = np.zeros(2)
-    y_lims[0] = np.min(y_misfit)
-    y_lims[1] = np.max(y_misfit)
+#     y_lims = np.zeros(2)
+#     y_lims[0] = np.min(y_misfit)
+#     y_lims[1] = np.max(y_misfit)
 
-    image_files = []
+#     image_files = []
 
-    for i, vts_file in enumerate(vts_files):  # TODO: problem with i when getting value of x_misfit: this is the index of the read model, not hte model along the chain!!!
-        print(f'Getting {vts_file}')
-        slice_data1 = extract_slice_from_vts(vts_file, axis=axis, index=index)
-        img_path = os.path.join(temp_dir, f"slice_{i:03d}.png")
-        slice_data1 = slice_data1[::-1, :]
-        # Get model number from file name.
-        match = re.search(r'(\d+)(?=\.[^.]+$)', vts_file)
-        if match:
-            mod_num = int(match.group(1))
-        else: 
-            mod_num = None
-        if i==0:
-            slice_data0 = slice_data1.copy()  # TODO load directly prior model -- safer. 
-        if mod_num is not None: 
-            save_slice_as_image(slice_data0, slice_data1, 
-                                padding_start, padding_end, 
-                                x_misfit, y_misfit, y_lims, max_x_misfit, accept_ratio, 
-                                gpars_class, img_path, 
-                                mod_num=mod_num, slice_index=index, 
-                                clim=clim, dpi=dpi)
-            image_files.append(img_path)
-        print('Save as: ',  img_path)
+#     for i, vts_file in enumerate(vts_files):  # TODO: problem with i when getting value of x_misfit: this is the index of the read model, not hte model along the chain!!!
+#         print(f'Getting {vts_file}')
+#         slice_data1 = extract_slice_from_vts(vts_file, axis=axis, index=index)
+#         img_path = os.path.join(temp_dir, f"slice_{i:03d}.png")
+#         slice_data1 = slice_data1[::-1, :]
+#         # Get model number from file name.
+#         match = re.search(r'(\d+)(?=\.[^.]+$)', vts_file)
+#         if match:
+#             mod_num = int(match.group(1))
+#         else: 
+#             mod_num = None
+#         if i==0:
+#             slice_data0 = slice_data1.copy()  # TODO load directly prior model -- safer. 
+#         if mod_num is not None: 
+#             save_slice_as_image(slice_data0, slice_data1, 
+#                                 padding_start, padding_end, 
+#                                 x_misfit, y_misfit, y_lims, max_x_misfit, accept_ratio, 
+#                                 gpars_class, img_path, 
+#                                 mod_num=mod_num, slice_index=index, 
+#                                 clim=clim, dpi=dpi)
+#             image_files.append(img_path)
+#         print('Save as: ',  img_path)
 
-    # Make the GIF
-    images = [Image.open(img) for img in image_files]
-    images[0].save(file_name_gif, save_all=True, append_images=images[1:], duration=1000/fps, loop=0)
+#     # Make the GIF
+#     images = [Image.open(img) for img in image_files]
+#     images[0].save(file_name_gif, save_all=True, append_images=images[1:], duration=1000/fps, loop=0)
 
-    print("GIF done with " + str(fps) + "FPS")
-    print(f"GIF saved to {file_name_gif}")
+#     print("GIF done with " + str(fps) + "FPS")
+#     print(f"GIF saved to {file_name_gif}")
 
-    return file_name_gif
-
+#     return file_name_gif
 
 
 def create_sections_animation(gpars, metrics, output_dir,
