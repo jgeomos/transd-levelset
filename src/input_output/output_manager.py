@@ -120,6 +120,7 @@ class LogRun:
         self.logger = logging.getLogger(logger_name)
         self.logger.setLevel(logging.INFO)
         self.logger.handlers = []  # Clear existing handlers (important for notebooks)
+        self.logger.propagate = False
         self.verbose = verbose
 
         file_handler = logging.FileHandler(log_name, mode='w')
