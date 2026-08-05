@@ -23,6 +23,14 @@ Jeremie Giraud<sup>1,2</sup>, Vitaliy Ogarko<sup>1,3</sup><br/>
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
+## Quick start using synthetic example: Google Colab.
+
+Does not require any installation and runs in the browser. 
+
+Click on the badge: 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1BMcrHZMyy65tEIY33TklgCbbf4Uvza0h)
+
+---
 
 ## Overview 
 
