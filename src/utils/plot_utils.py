@@ -82,6 +82,89 @@ class PlotParameters:
     ylims: Optional[np.array] = None
 
 
+def plot_model_sections(model, gpars, ix=None, iy=None, iz=None,
+                        clim=None, cmap='viridis', figsize=(15, 4.5),
+                        coord_unit='m'):
+    """
+    Plot three orthogonal sections (constant x, y and z) through a 3-D model.
+
+    Parameters
+    ----------
+    model : ndarray
+        Model values, either flat (nx*ny*nz,) or shaped (nx, ny, nz).
+    gpars : GridParameters
+        Grid parameters providing ``dim`` (nx, ny, nz) and flat cell-centre
+        coordinate arrays ``x``, ``y``, ``z`` (length nx*ny*nz).
+    ix, iy, iz : int or None, optional
+        Cell indices of the constant-x, -y and -z sections. ``None`` (default)
+        selects the middle of the mesh along that axis.
+    clim : array-like of length 2, optional
+        Colour limits (min, max), shared by all panels. Defaults to model min/max.
+    cmap : str, optional
+        Matplotlib colormap name.
+    figsize : tuple, optional
+        Figure size in inches.
+    coord_unit : str, optional
+        Unit label for the coordinate axes (e.g. 'm' or 'km').
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    axes : ndarray of matplotlib.axes.Axes
+    """
+    set_plotprops()
+
+    nz, ny, nx = gpars.dim
+    vol = np.asarray(model).reshape(gpars.dim)          # (nx, ny, nz)
+
+    ix = nx // 2 if ix is None else ix
+    iy = ny // 2 if iy is None else iy
+    iz = nz // 2 if iz is None else iz
+
+    # 1-D cell-centre coordinates along each axis.
+    xc = gpars.x.reshape(gpars.dim)[0, 0, :]
+    yc = gpars.y.reshape(gpars.dim)[0, :, 0]
+    zc = gpars.z.reshape(gpars.dim)[:, 0, 0]
+
+    if clim is None:
+        clim = np.array([vol.min(), vol.max()])
+
+    u = coord_unit
+    # (data, horiz. coord, vert. coord, title, xlabel, ylabel, aspect, invert depth)
+    panels = [
+        (vol[:, :, ix], yc, zc, f'X-section (ix={ix}, x={xc[ix]:.0f} {u})', f'y ({u})', f'z ({u})', 'equal',  True),
+        (vol[:, iy, :], xc, zc, f'Y-section (iy={iy}, y={yc[iy]:.0f} {u})', f'x ({u})', f'z ({u})', 'equal',  True),
+        (vol[iz, :, :], xc, yc, f'Z-section (iz={iz}, z={zc[iz]:.0f} {u})', f'x ({u})', f'y ({u})', 'equal', False),
+    ]
+
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    for ax, (data, hc, vc, title, xlab, ylab, aspect, invert) in zip(axes, panels):
+        plt.sca(ax)
+        plot_model(ax, hc, vc, data, title, cmap=cmap, clim=clim)
+
+        ax.set_xlabel(xlab)
+        ax.set_ylabel(ylab)
+        ax.set_aspect(aspect)
+
+        if invert:
+            ax.invert_yaxis()
+
+    # X-section (y,z)
+    axes[0].axvline(yc[iy], color='w', ls='--', lw=1.5)
+    axes[0].axhline(zc[iz], color='w', ls='--', lw=1.5)
+
+    # Y-section (x,z)
+    axes[1].axvline(xc[ix], color='w', ls='--', lw=1.5)
+    axes[1].axhline(zc[iz], color='w', ls='--', lw=1.5)
+
+    # Z-section (x,y)
+    axes[2].axvline(xc[ix], color='w', ls='--', lw=1.5)
+    axes[2].axhline(yc[iy], color='w', ls='--', lw=1.5)
+
+    fig.tight_layout()
+    return fig, axes
+
+
 def plot_metrics(metrics, run_params, data_misfit_lims=np.array([0.25, 5.0]), print_stats=True, 
                     show=False, save=True, plot_path=None):
     """
@@ -208,6 +291,7 @@ def plot_metrics(metrics, run_params, data_misfit_lims=np.array([0.25, 5.0]), pr
     ax.axhline(y=1, color='k', linestyle='--', alpha=0.5)
     ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
     ax.axhline(y=np.mean(metrics.accept_ratio), color='r', linestyle='--', label='mean')
+    ax.legend(loc='best', fontsize=9)
     ax.set_title('Acceptance Ratio')
     ax.set_xlabel('Iteration')
     ax.grid(True, alpha=0.3)
@@ -480,6 +564,11 @@ def create_section_gif_from_vts(vts_folder,
 
     temp_dir = "temp_slice_images"
     os.makedirs(temp_dir, exist_ok=True)
+
+    # Delete old frames
+    for f in glob.glob(os.path.join(temp_dir, "*.png")):
+        os.remove(f)
+    print('Old  frames: Deleted. ')
 
     y_lims = np.zeros(2)
     y_lims[0] = np.min(y_misfit)
@@ -862,8 +951,10 @@ def save_slice_as_image(slice_2d0, slice_2d,
     ax2 = fig.add_subplot(gs[4, 0:2])    # only row 2
 
     ax2.plot(x_misfit[:mod_num], y_misfit[:mod_num])
+    print(mod_num)
+    print(np.shape(x_misfit))
     if len(x_misfit)>1:
-        ax2.plot(x_misfit[mod_num], y_misfit[mod_num], 'o')
+        ax2.plot(x_misfit[mod_num-1], y_misfit[mod_num-1], 'o')
 
     ax2.set_xlim([0, max_x_misfit])
     ax2.set_ylim([y_lims[0], y_lims[1]])
@@ -878,7 +969,7 @@ def save_slice_as_image(slice_2d0, slice_2d,
 
     ax3.plot(x_misfit[:mod_num], accept_ratio[:mod_num])
     if len(x_misfit)>1:
-        ax2.plot(x_misfit[mod_num], accept_ratio[mod_num], 'o')
+        ax2.plot(x_misfit[mod_num-1], accept_ratio[mod_num-1], 'o')
 
     ax3.set_xlim([0, max_x_misfit])
     ax3.set_ylim([0., 1.])
